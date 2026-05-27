@@ -623,6 +623,342 @@ def analyze(agg: dict, perfil: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# 5b. RECOMENDACIONES — cambios sugeridos concretos
+# ---------------------------------------------------------------------------
+# Categorías que consideramos HY / sub-IG agresivos
+HY_CATEGORIES = {"High Yield"}
+EM_BOND_CATEGORIES = {"EM Bonds", "EM BONDS", "Asian Bonds"}
+FLEX_FI_CATEGORIES = {"Flexible FI"}
+EUROPE_EQ_CATEGORIES = {"Europe Equity"}
+CORE_FI_CATEGORIES = {"Core Fixed Income", "Short Duration"}
+
+
+def _short_name(name: str, n: int = 38) -> str:
+    """Trim de nombre de fondo para tablas."""
+    if not name:
+        return "—"
+    name = re.sub(r"\s+", " ", str(name)).strip()
+    if len(name) <= n:
+        return name
+    return name[: n - 1].rstrip() + "…"
+
+
+def find_funds_by_categoria(holdings_detail: list[dict], catalog: dict,
+                            categorias: set[str]) -> list[dict]:
+    """Holdings (vista enriquecida en agg['_holdings']) cuya `categoria` está en el set."""
+    out = []
+    for h in holdings_detail:
+        cat = (h.get("categoria") or "")
+        if cat in categorias:
+            isin = h["isin"]
+            ter = catalog.get(isin, {}).get("ter")
+            out.append({**h, "ter": ter})
+    return out
+
+
+def find_funds_subig(holdings_detail: list[dict], catalog: dict,
+                     min_subig: float = 40.0) -> list[dict]:
+    """Holdings con alto % sub-IG en su composición (HY + EM debt + flex FI sub-IG)."""
+    out = []
+    for h in holdings_detail:
+        isin = h["isin"]
+        cat = (h.get("categoria") or "")
+        fund = catalog.get(isin, {})
+        bb = float(fund.get("f_cacr_bb") or 0)
+        b = float(fund.get("f_cacr_b") or 0)
+        ccc = float(fund.get("f_cacr_ccc") or 0)
+        nr = float(fund.get("f_cacr_nr") or 0)
+        subig = bb + b + ccc + nr
+        # HY puro siempre cuenta; otros solo si la métrica supera el threshold
+        if cat in HY_CATEGORIES or subig >= min_subig:
+            out.append({**h, "subig_pct": subig, "ter": fund.get("ter")})
+    # ordenar por peso descendente
+    out.sort(key=lambda x: -x["peso"])
+    return out
+
+
+def find_long_duration_funds(holdings_detail: list[dict], catalog: dict,
+                             min_dur: float = 7.0) -> list[dict]:
+    """Fondos con duration > min_dur y exposición RF significativa."""
+    out = []
+    for h in holdings_detail:
+        isin = h["isin"]
+        fund = catalog.get(isin, {})
+        dur = fund.get("f_ind_moddur")
+        rf_share = fund.get("s_aa_fixed_income") or 0
+        if dur is None or rf_share < 30:
+            continue
+        if float(dur) > min_dur:
+            out.append({**h, "dur": float(dur), "ter": fund.get("ter")})
+    out.sort(key=lambda x: -x["peso"])
+    return out
+
+
+def find_high_ter_funds(holdings_detail: list[dict], catalog: dict,
+                       n: int = 2, min_ter: float = 1.4) -> list[dict]:
+    """Top N fondos con TER alto (peso * TER como criterio combinado)."""
+    scored = []
+    for h in holdings_detail:
+        isin = h["isin"]
+        ter = catalog.get(isin, {}).get("ter")
+        if ter is None:
+            continue
+        ter_v = float(ter)
+        if ter_v < min_ter:
+            continue
+        # score = peso * ter (impacto en el TER ponderado total)
+        scored.append({**h, "ter": ter_v, "_score": h["peso"] * ter_v})
+    scored.sort(key=lambda x: -x["_score"])
+    return scored[:n]
+
+
+def find_overlapping_sub(holdings_detail: list[dict], min_total: float = 25.0) -> list[dict]:
+    """Detecta sub-categorías con 2+ fondos que juntos suman > min_total."""
+    by_sub: dict[str, list[dict]] = defaultdict(list)
+    for h in holdings_detail:
+        sub = h.get("sub") or ""
+        if not sub or sub == "?":
+            continue
+        by_sub[sub].append(h)
+    out = []
+    for sub, funds in by_sub.items():
+        if len(funds) < 2:
+            continue
+        tot = sum(f["peso"] for f in funds)
+        if tot >= min_total:
+            funds_sorted = sorted(funds, key=lambda x: -x["peso"])
+            out.append({"sub": sub, "total": tot, "funds": funds_sorted})
+    out.sort(key=lambda x: -x["total"])
+    return out
+
+
+def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
+              catalog: dict) -> list[dict]:
+    """Genera una lista de cambios sugeridos concretos basándose en la
+    composición agregada vs house view.
+
+    Cada item: {'dir': 'up|dn|sw|new', 'action': str, 'position': str,
+                'de': str, 'a': str, 'razon': str}
+    """
+    th = THRESHOLDS.get(perfil, THRESHOLDS["Otro"])
+    holdings_detail = agg.get("_holdings", []) or []
+    if not holdings_detail:
+        return []
+
+    recs: list[dict] = []
+    # Evitar duplicar ajustes sobre la misma posición + dirección
+    seen_keys: set[tuple[str, str]] = set()
+
+    def add(dir_, action, position, de, a, razon):
+        key = (dir_, _short_name(position, 60).lower())
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        recs.append({
+            "dir": dir_, "action": action, "position": position,
+            "de": de, "a": a, "razon": razon,
+        })
+
+    # Reusamos las métricas que analyze() ya calcula
+    rf  = agg.get("s_aa_fixed_income", 0) or 0
+    rv  = agg.get("s_aa_equity", 0) or 0
+    cash = agg.get("s_aa_cash", 0) or 0
+    com  = agg.get("s_aa_commodities", 0) or 0
+    dur  = agg.get("f_ind_moddur", 0) or 0
+    aaa = agg.get("f_cacr_aaa", 0) or 0
+    aa  = agg.get("f_cacr_aa", 0) or 0
+    a_q = agg.get("f_cacr_a", 0) or 0
+    bbb = agg.get("f_cacr_bbb", 0) or 0
+    bb_q = agg.get("f_cacr_bb", 0) or 0
+    b_q  = agg.get("f_cacr_b", 0) or 0
+    ccc_q = agg.get("f_cacr_ccc", 0) or 0
+    nr_q  = agg.get("f_cacr_nr", 0) or 0
+    sub_ig_rf = bb_q + b_q + ccc_q + nr_q
+    tech = agg.get("e_sec_tech", 0) or 0
+    ind  = agg.get("e_sec_ind", 0) or 0
+    eq_em = (agg.get("e_geo_la", 0) or 0) + (agg.get("e_geo_eure", 0) or 0) + \
+            (agg.get("e_geo_china", 0) or 0) + (agg.get("e_geo_asiae", 0) or 0)
+    eq_europe = (agg.get("e_geo_eurf", 0) or 0) + (agg.get("e_geo_uk", 0) or 0)
+    # eq_em y eq_europe vienen como % del bucket RV — convertir a % de cartera
+    eq_em_port = eq_em * rv / 100.0
+    eq_europe_port = eq_europe * rv / 100.0
+    ter = agg.get("ter")
+    precious = agg.get("c_ti_precious", 0) or 0
+    energy = agg.get("c_ti_energy", 0) or 0
+    precious_port = precious * com / 100.0
+    energy_port = energy * com / 100.0
+
+    # ---- R1 Calidad crediticia agresiva ---------------------------------
+    if sub_ig_rf > (100 - th["ig_min"]) and rf > 5:
+        # Identificar HY / sub-IG funds
+        agg_funds = find_funds_subig(holdings_detail, catalog, min_subig=40.0)
+        for f in agg_funds[:3]:
+            peso = f["peso"]
+            target = round(peso / 2, 1)
+            add(
+                "dn", "Bajar",
+                _short_name(f["nombre"]),
+                f"{peso:.1f}%", f"{target:.1f}%",
+                "HY/sub-IG selectivo en view; underwriting exigente",
+            )
+        # Sumar IG short duration
+        add(
+            "new", "Sumar",
+            "TIPS / IG Short Duration",
+            "0%", "3-5%",
+            "Reemplazar carry sub-IG con calidad y duration corta",
+        )
+
+    # ---- R2 Duration larga ----------------------------------------------
+    if dur > th["dur_max"] and rf > 5:
+        long_funds = find_long_duration_funds(holdings_detail, catalog,
+                                              min_dur=th["dur_max"])
+        for f in long_funds[:2]:
+            peso = f["peso"]
+            target = max(round(peso / 2, 1), 0.0)
+            add(
+                "sw", "Rotar",
+                _short_name(f["nombre"]),
+                f"{peso:.1f}% (dur {f['dur']:.1f}a)",
+                "Corporate short-duration",
+                "UW duration larga US — term premium + déficits",
+            )
+        if not long_funds:
+            add(
+                "dn", "Bajar",
+                "Duration RF agregada",
+                f"{dur:.1f}a", f"≤{th['dur_max']}a",
+                "UW duration larga US",
+            )
+
+    # ---- R3 UW equities vs perfil (vs view OW global equities) ----------
+    # Disparar si RV está bajo el piso, o si está en la mitad baja del rango
+    # del perfil (mientras el view es OW, conviene movernos al midpoint+).
+    if perfil not in ("Conservador", "Otro"):
+        midpoint = (th["rv_min"] + th["rv_max"]) / 2.0
+        # umbral suave: 80% del midpoint (i.e. claramente debajo)
+        soft_target = midpoint * 0.85
+        if rv < max(th["rv_min"], soft_target):
+            target_lo = max(int(round(midpoint - 5)), th["rv_min"])
+            target_hi = min(target_lo + 4, th["rv_max"])
+            add(
+                "up", "Subir",
+                "Renta Variable global total",
+                f"{rv:.1f}%", f"{target_lo}-{target_hi}%",
+                "House view marca OW global equities",
+            )
+
+    # ---- R4 EM equity ausente -------------------------------------------
+    if perfil not in ("Conservador", "Otro") and eq_em_port < 3 and rv > 10:
+        add(
+            "new", "Sumar",
+            "EM Equity selectivo (Norte Asia + LatAm)",
+            f"{eq_em_port:.1f}%", "3-5%",
+            "OW EM selectivo: semis/IA Norte Asia + commodities LatAm",
+        )
+
+    # ---- R5 Commodities / gold / energy ---------------------------------
+    if precious_port < 1 and rv > 10:
+        add(
+            "new", "Sumar",
+            "Oro / ETF SPDR Gold",
+            f"{precious_port:.1f}%", "3-5%",
+            "OW oro · hedge geopolítico e inflacionario",
+        )
+    if energy_port < 1 and rv > 15:
+        add(
+            "new", "Sumar",
+            "Commodities broad / energía",
+            f"{energy_port:.1f}%", "3%",
+            "OW energy + cobre · beneficiarios del ciclo IA-infra",
+        )
+
+    # ---- R6 IA-infraestructura ------------------------------------------
+    # 6a — tech+industrials del RV bajos
+    if rv > 15 and (tech + ind) < 25:
+        add(
+            "new", "Sumar",
+            "IA-infraestructura física (cobre, grid, REITs, semis)",
+            f"{tech+ind:.1f}% del RV", "≥25% del RV (+5% nuevo)",
+            "Alto convicción del view · no solo mega-cap tech",
+        )
+    else:
+        # 6b — sin exposición temática IA-infra explícita (sector/thematic)
+        has_thematic = any(
+            (h.get("categoria") or "") == "Sector/Thematic"
+            for h in holdings_detail
+        )
+        if rv > 25 and not has_thematic and perfil not in ("Conservador",):
+            add(
+                "new", "Sumar",
+                "IA-infraestructura física (cobre, grid, REITs, semis)",
+                "0%", "5%",
+                "Alto convicción del view · faltan thematics IA-infra",
+            )
+
+    # ---- R7 TER alto ----------------------------------------------------
+    if ter is not None and ter > 1.5:
+        top_costly = find_high_ter_funds(holdings_detail, catalog, n=2, min_ter=1.4)
+        for f in top_costly:
+            add(
+                "sw", "Rotar",
+                _short_name(f["nombre"]),
+                f"{f['peso']:.1f}% (TER {f['ter']:.2f}%)",
+                "ETF/clase institucional equivalente",
+                "TER ponderado alto · reducir costo agregado",
+            )
+
+    # ---- R8 Europa concentrada ------------------------------------------
+    if eq_europe_port > 15:
+        europe_funds = find_funds_by_categoria(holdings_detail, catalog,
+                                              EUROPE_EQ_CATEGORIES)
+        if europe_funds:
+            europe_funds.sort(key=lambda x: -x["peso"])
+            f = europe_funds[0]
+            peso = f["peso"]
+            target = max(round(peso * 0.6, 1), 0.0)
+            add(
+                "dn", "Bajar",
+                _short_name(f["nombre"]),
+                f"{peso:.1f}%", f"{target:.1f}%",
+                f"Europa pura {eq_europe_port:.1f}% > 15% · view Neutral; redirigir a EM/Global",
+            )
+        else:
+            add(
+                "dn", "Bajar",
+                "Exposición Europa equities",
+                f"{eq_europe_port:.1f}%", "<15%",
+                "View Neutral Europa · redirigir delta a EM/Global",
+            )
+
+    # ---- R9 Cash exceso -------------------------------------------------
+    if cash > 10:
+        add(
+            "dn", "Bajar",
+            "Cash",
+            f"{cash:.1f}%", "<5%",
+            "Útil táctico, malo estructural · redirigir a YTW corto",
+        )
+
+    # ---- R10 Solapamiento por sub-categoría -----------------------------
+    overlaps = find_overlapping_sub(holdings_detail, min_total=25.0)
+    for ov in overlaps[:2]:
+        funds = ov["funds"][:2]
+        if len(funds) < 2:
+            continue
+        pos_label = " + ".join(_short_name(f["nombre"], 22) for f in funds)
+        add(
+            "sw", "Rotar",
+            f"Consolidar {pos_label}",
+            f"{ov['total']:.1f}% en «{ov['sub']}»",
+            "Un único vehículo",
+            f"Solapamiento sub-categoría · reducir redundancia",
+        )
+
+    return recs
+
+
+# ---------------------------------------------------------------------------
 # 6. PROCESAR pipeline completo
 # ---------------------------------------------------------------------------
 def process_all(catalog: dict) -> list[dict]:
@@ -642,12 +978,15 @@ def process_all(catalog: dict) -> list[dict]:
                 "eq_em": None, "eq_europe": None, "eq_na": None,
                 "tech": None, "ind": None, "ter": None, "non_us_rv": None,
             }
+            recs = []
         else:
             agg = aggregate(holdings, catalog)
             ana = analyze(agg, s["perfil"])
+            recs = recommend(agg, s["perfil"], holdings, catalog)
         s["holdings"] = holdings
         s["agg"] = agg
         s["ana"] = ana
+        s["recommendations"] = recs
         out.append(s)
     return out
 
@@ -788,6 +1127,34 @@ def render_detail(s: dict, det_id: str) -> str:
             "</ul></div>"
         )
 
+    # Cambios sugeridos — tabla accionable
+    recs = s.get("recommendations") or []
+    if recs:
+        rec_rows = ""
+        for r in recs:
+            rec_rows += (
+                f'<tr>'
+                f'<td class="dir {html.escape(r["dir"])}">{html.escape(r["action"])}</td>'
+                f'<td class="act">{html.escape(r["position"])}</td>'
+                f'<td class="num">{html.escape(r["de"])}</td>'
+                f'<td class="num">{html.escape(r["a"])}</td>'
+                f'<td>{html.escape(r["razon"])}</td>'
+                f'</tr>'
+            )
+        changes_html = (
+            '<div class="block"><span class="lbl">🔄 Cambios sugeridos</span>'
+            '<div class="changes"><table>'
+            '<thead><tr><th>Acción</th><th>Posición</th><th>De</th><th>A</th><th>Razón</th></tr></thead>'
+            f'<tbody>{rec_rows}</tbody></table></div></div>'
+        )
+    else:
+        changes_html = (
+            '<div class="block"><span class="lbl">🔄 Cambios sugeridos</span>'
+            '<p class="muted" style="font-size:13px;margin-top:6px">'
+            'Sin cambios sugeridos — estrategia bien alineada con view.'
+            '</p></div>'
+        )
+
     # Bar de allocation
     rf_w = ana.get("rf") or 0
     rv_w = ana.get("rv") or 0
@@ -899,6 +1266,7 @@ def render_detail(s: dict, det_id: str) -> str:
                   </div>
                   {good_html}
                   {bad_html}
+                  {changes_html}
                   {miss_html}
                 </div>
                 <div class="sheet-data">
