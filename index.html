@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revisión de Estrategias · LATAM ConsultUs · Abril 2026</title>
+<meta name="description" content="Revisión de las estrategias de inversión de Abril 2026 — alineación con house view, hallazgos y cambios sugeridos.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0c2e4e; --navy-900:#081f37; --navy-700:#143d63; --navy-600:#1c4d7a;
+  --sky:#4986c4; --sky-300:#7cabd6; --sky-100:#d9e6f2; --steel:#86a9c9;
+  --g1:#dde3ea; --g2:#f1f4f8; --g3:#aab3c0; --g4:#647688; --ink:#0c2e4e;
+  --paper:#f6f8fb; --card:#ffffff; --border:#e4e9f0;
+  --fg:#13314f; --fg-muted:#5d6e80; --fg-subtle:#94a1b1;
+  --pos:#1f8a5b; --pos-bg:#e6f3ec; --neg:#c0413a; --neg-bg:#f8e6e4; --neu:#8a96a4;
+  --warn:#c98a2b; --warn-bg:#fbf1de;
+  /* acentos por perfil */
+  --c-cons:#3d78c0; --c-mod:#1f9aa0; --c-din:#6a63c8; --c-otro:#a25fa6;
+  --grad-navy:linear-gradient(158deg,#081f37 0%,#0c2e4e 52%,#143d63 100%);
+  --sans:'Open Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  --maxw:1240px; --gut:clamp(18px,3.4vw,46px);
+  --r:14px; --r-s:9px;
+  --sh1:0 1px 2px rgba(12,46,78,.05),0 1px 1px rgba(12,46,78,.04);
+  --sh2:0 10px 30px rgba(12,46,78,.07),0 2px 8px rgba(12,46,78,.05);
+  --sh3:0 22px 60px rgba(12,46,78,.13),0 6px 16px rgba(12,46,78,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:72px;-webkit-text-size-adjust:100%}
+body{font-family:var(--sans);color:var(--fg);background:var(--paper);font-size:15px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+.num,table td,table th,.kv,.hm-v,.fig{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.container{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gut)}
+.eyebrow{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--sky);margin-bottom:14px}
+.eyebrow.light{color:var(--sky-300)}
+.lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-subtle)}
+.muted{color:var(--fg-muted);font-weight:400}
+h1,h2,h3,h4{font-weight:300;letter-spacing:-.02em;line-height:1.06;color:var(--ink)}
+h1 strong,h2 strong,h3 strong{font-weight:700}
+
+/* ---------- top nav ---------- */
+.topnav{position:sticky;top:0;z-index:60;background:rgba(246,248,251,.86);
+  backdrop-filter:saturate(150%) blur(12px);-webkit-backdrop-filter:saturate(150%) blur(12px);
+  border-bottom:1px solid var(--border)}
+.nav-in{display:flex;align-items:center;gap:26px;height:60px}
+.brand{font-size:13px;font-weight:800;letter-spacing:.04em;color:var(--navy);text-transform:uppercase}
+.brand span{color:var(--sky);margin-left:6px;font-weight:600}
+.nav-links{display:flex;gap:18px;margin-left:auto;font-size:12.5px;font-weight:600;color:var(--fg-muted);
+  overflow-x:auto;scrollbar-width:none;white-space:nowrap}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links a{padding:5px 0;border-bottom:2px solid transparent;transition:color .18s,border-color .18s}
+.nav-links a:hover,.nav-links a.active{color:var(--navy);border-bottom-color:var(--sky)}
+.nav-date{flex-shrink:0;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-subtle)}
+
+/* ---------- hero ---------- */
+.hero{position:relative;background:var(--grad-navy);color:#fff;overflow:hidden;isolation:isolate}
+.hero-bg{position:absolute;inset:0;z-index:-1;
+  background:
+   radial-gradient(120% 90% at 84% -10%,rgba(124,171,214,.32),transparent 55%),
+   radial-gradient(80% 70% at -5% 110%,rgba(73,134,196,.18),transparent 60%);}
+.hero-bg::after{content:"";position:absolute;inset:0;opacity:.5;
+  background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:26px 26px;
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 38%,#000 82%,transparent);
+          mask-image:linear-gradient(180deg,transparent,#000 38%,#000 82%,transparent);}
+.hero-in{position:relative;padding-block:clamp(34px,6vw,72px) clamp(46px,7vw,92px)}
+.hero-brand{font-size:13px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#fff;margin-bottom:clamp(30px,6vw,62px)}
+.hero-brand span{color:var(--sky-300);font-weight:600;margin-left:8px}
+.hero h1{font-size:clamp(40px,7.5vw,96px);line-height:.95;letter-spacing:-.03em;color:#fff;margin:6px 0 0}
+.hero h1 strong{color:#fff;font-weight:600}
+.hero-sub{max-width:58ch;margin-top:26px;font-size:clamp(15px,1.7vw,18.5px);line-height:1.62;color:#cbd9e8;font-weight:300}
+.hero-meta{display:flex;flex-wrap:wrap;gap:clamp(24px,5vw,60px);margin-top:clamp(32px,5vw,54px);
+  padding-top:30px;border-top:1px solid rgba(255,255,255,.16)}
+.hero-meta>div{display:flex;flex-direction:column;gap:4px}
+.hm-v{font-size:clamp(26px,3.4vw,40px);font-weight:300;letter-spacing:-.02em;color:#fff}
+.hm-v small{font-size:.5em;color:var(--sky-300);font-weight:600;letter-spacing:.02em}
+.hm-l{font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#86a0bb}
+
+/* ---------- index cards ---------- */
+.idx{padding-block:clamp(40px,6vw,72px)}
+.idx-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(14px,1.8vw,22px)}
+.idx-card{position:relative;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r);box-shadow:var(--sh1);padding:22px 22px 20px;overflow:hidden;
+  transition:box-shadow .25s,transform .25s;cursor:pointer}
+.idx-card:hover{box-shadow:var(--sh2);transform:translateY(-3px)}
+.idx-card::before{content:"";position:absolute;left:0;top:0;width:100%;height:3px;background:var(--gc)}
+.idx-n{font-size:12px;font-weight:800;letter-spacing:.1em;color:var(--gc)}
+.idx-card h3{font-size:clamp(17px,1.5vw,21px);font-weight:700;margin:14px 0 0;letter-spacing:-.01em}
+.idx-card p{font-size:12.5px;color:var(--fg-muted);line-height:1.5;margin-top:8px;flex:1}
+.idx-foot{display:flex;align-items:baseline;justify-content:space-between;margin-top:16px;padding-top:13px;border-top:1px solid var(--g2)}
+.idx-foot .c{font-size:24px;font-weight:300;color:var(--navy)}
+.idx-foot .c small{font-size:11px;font-weight:700;color:var(--fg-subtle);text-transform:uppercase;letter-spacing:.1em;margin-left:5px}
+.idx-foot .go{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gc)}
+
+/* ---------- panorama (house view summary) ---------- */
+.panorama{padding-block:clamp(8px,2vw,20px) clamp(40px,6vw,72px)}
+.sec-head{max-width:760px;margin-bottom:clamp(26px,4vw,42px)}
+.sec-head h2{font-size:clamp(27px,4.2vw,46px)}
+.sec-head .lede{font-size:clamp(15px,1.6vw,18px);line-height:1.6;color:var(--fg-muted);margin-top:15px;font-weight:300;max-width:68ch}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh2)}
+.view-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(12px,1.6vw,18px)}
+.view-card{padding:18px 20px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh1)}
+.view-card .lbl{margin-bottom:6px}
+.view-card h4{font-size:17px;font-weight:700;color:var(--navy)}
+.view-card p{font-size:12.5px;color:var(--fg-muted);margin-top:6px;line-height:1.55}
+.view-list{margin-top:18px;display:grid;grid-template-columns:repeat(2,1fr);gap:14px 24px;padding:22px 26px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh1)}
+.view-list .vli{display:flex;align-items:baseline;gap:10px;font-size:13px;color:var(--fg)}
+.tag{display:inline-flex;align-items:center;justify-content:center;min-width:88px;padding:3px 9px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;flex-shrink:0}
+.tag.ow{background:#e6f3ec;color:#1f8a5b}
+.tag.uw{background:#f8e6e4;color:#c0413a}
+.tag.nw{background:var(--g2);color:var(--fg-muted)}
+.tag.mod{background:#fbf1de;color:#c98a2b}
+
+/* ---------- category divider ---------- */
+.cat{scroll-margin-top:60px}
+.divider{background:var(--grad-navy);color:#fff;margin-top:clamp(28px,5vw,56px);position:relative;overflow:hidden}
+.divider::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--gc)}
+.divider-in{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding-block:clamp(32px,5vw,58px)}
+.divider .eyebrow{color:var(--gc);filter:saturate(1.3) brightness(1.35)}
+.divider h2{color:#fff;font-size:clamp(28px,5vw,54px);margin-top:6px}
+.divider-meta{margin-top:13px;font-size:13.5px;color:#b9c8d8;font-weight:300;max-width:54ch}
+.divider-num{font-size:clamp(56px,11vw,140px);font-weight:200;line-height:.8;color:rgba(255,255,255,.10);letter-spacing:-.04em}
+
+/* ---------- overview table ---------- */
+.ov-wrap{margin-top:clamp(22px,3.5vw,40px);background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh2);overflow:hidden}
+table.ov{width:100%;border-collapse:collapse;font-size:13px}
+.ov thead th{background:var(--g2);color:var(--fg-muted);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:11px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.ov th.num,.ov td.num{text-align:right}
+.ov th.ctr,.ov td.ctr{text-align:center}
+.ov tbody tr.ov-row{cursor:pointer;transition:background .14s}
+.ov tbody tr.ov-row:hover{background:var(--sky-100)}
+.ov tbody tr.ov-row.open{background:var(--g2)}
+.ov td{padding:11px 12px;border-bottom:1px solid var(--g2);vertical-align:middle}
+.ov-name{min-width:200px}
+.ov-name .chev{display:inline-block;width:7px;height:7px;border-right:2px solid var(--gc);border-bottom:2px solid var(--gc);transform:rotate(-45deg);margin-right:11px;transition:transform .3s ease;vertical-align:middle}
+.ov-row.open .ov-name .chev{transform:rotate(45deg)}
+.ov-nm{font-weight:700;color:var(--navy)}
+.ov-row:hover .ov-nm{color:var(--gc)}
+.ov-sub{display:block;font-size:10.5px;color:var(--fg-subtle);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px;padding-left:18px}
+.ov-cat{color:var(--fg-muted);font-size:12px}
+.ov td.num{color:var(--fg)}
+.ov .pos{color:var(--pos)}.ov .neg{color:var(--neg)}.ov .neu{color:var(--fg-subtle)}
+.ov-detail>td{padding:0;border:0;background:#fbfcfe}
+.dwrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .42s cubic-bezier(.16,1,.3,1)}
+.ov-detail.open .dwrap{grid-template-rows:1fr}
+.dinner{overflow:hidden;min-height:0}
+
+/* verdict badges */
+.vd{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.vd.ok{background:var(--pos-bg);color:var(--pos)}
+.vd.wn{background:var(--warn-bg);color:var(--warn)}
+.vd.cr{background:var(--neg-bg);color:var(--neg)}
+.vd.pd{background:var(--g2);color:var(--fg-subtle)}
+.vd::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+
+/* ---------- tearsheet ---------- */
+.sheet{padding:clamp(18px,2.4vw,30px) clamp(16px,2vw,26px) clamp(22px,2.6vw,32px)}
+.sheet-h{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.sheet-grp{display:inline-flex;align-items:center;gap:8px;font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-subtle)}
+.sheet-grp::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--gc)}
+.sheet-h h3{font-size:clamp(17px,1.9vw,23px);margin:9px 0 0;font-weight:600;letter-spacing:-.01em}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--navy);background:var(--g2);border:1px solid var(--border);border-radius:6px;padding:3px 9px}
+.chip-ag{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-subtle)}
+.sheet-h-r{display:flex;flex-direction:column;align-items:flex-end;gap:9px;flex-shrink:0;min-width:172px}
+.sheet-body{display:grid;grid-template-columns:1.06fr .94fr;gap:clamp(20px,3.2vw,42px);padding:20px 0 0}
+.sheet-thesis .block{margin-bottom:18px}
+.sheet-thesis .lbl{margin-bottom:8px}
+.sheet-thesis p{font-size:13.5px;line-height:1.62;color:var(--fg);max-width:64ch}
+.sheet-thesis p+p{margin-top:9px}
+.sheet-thesis .block.verdict p{font-size:14px;font-weight:600;color:var(--navy)}
+.findings{list-style:none;display:grid;gap:9px;margin-top:4px}
+.findings li{position:relative;padding-left:24px;font-size:13px;line-height:1.55;color:var(--fg)}
+.findings li::before{content:"";position:absolute;left:2px;top:8px;width:8px;height:8px;border-radius:50%}
+.findings.good li::before{background:var(--pos)}
+.findings.bad li::before{background:var(--neg)}
+.findings.fix li::before{background:var(--warn)}
+.findings li strong{color:var(--navy);font-weight:700}
+.sheet-data{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px;align-content:start}
+.data-grp.full{grid-column:1/-1}
+.data-grp .grp-t{display:block;font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--gc);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.data-grp.full dl{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}
+.dl{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;border-bottom:1px solid var(--g2)}
+.dl dt{font-size:12px;color:var(--fg-muted);white-space:nowrap}
+.dl dd{font-size:13px;font-weight:700;color:var(--navy);text-align:right}
+.dl dd.strong{color:var(--gc);font-weight:800}
+.dl dd .muted{font-size:11px}
+.dl dd.pos{color:var(--pos)}
+.dl dd.neg{color:var(--neg)}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;letter-spacing:-.02em}
+
+/* allocation bar */
+.alloc{margin-top:2px}
+.alloc-bar{display:flex;height:14px;border-radius:4px;overflow:hidden;background:var(--g1)}
+.alloc-bar span{display:block;height:100%}
+.alloc-leg{display:grid;grid-template-columns:1fr 1fr;gap:5px 16px;margin-top:11px}
+.alloc-leg div{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--fg-muted)}
+.alloc-leg i{width:9px;height:9px;border-radius:2px}
+.alloc-leg b{margin-left:auto;color:var(--navy);font-weight:700}
+
+/* changes table */
+.changes{margin-top:14px;background:#fbfcfe;border:1px solid var(--border);border-radius:var(--r-s);overflow:hidden}
+.changes table{width:100%;border-collapse:collapse;font-size:12.5px}
+.changes th{background:var(--g2);color:var(--fg-muted);font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:9px 12px;text-align:left}
+.changes td{padding:9px 12px;border-top:1px solid var(--g2);vertical-align:top}
+.changes td.act{font-weight:700;color:var(--navy);white-space:nowrap}
+.changes td.dir{font-weight:800;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.changes td.dir.up{color:var(--pos)}
+.changes td.dir.dn{color:var(--neg)}
+.changes td.dir.sw{color:var(--warn)}
+.changes td.dir.new{color:var(--sky)}
+
+/* ---------- closing ---------- */
+.closing{background:var(--grad-navy);color:#fff;margin-top:clamp(40px,6vw,80px)}
+.closing-in{padding-block:clamp(46px,7vw,92px)}
+.closing-brand{font-size:13px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#fff;margin-bottom:clamp(26px,5vw,50px)}
+.closing-brand span{color:var(--sky-300);font-weight:600;margin-left:8px}
+.closing-headline{font-size:clamp(28px,5vw,56px);font-weight:300;line-height:1.05;letter-spacing:-.025em}
+.closing-headline strong{font-weight:600}
+.closing-rule{width:54px;height:2px;background:var(--sky);margin:clamp(24px,4vw,38px) 0}
+.disclaimer{margin-top:clamp(32px,5vw,54px);padding-top:24px;border-top:1px solid rgba(255,255,255,.16)}
+.disclaimer p{font-size:11px;line-height:1.7;color:#8ea3bb;max-width:780px}
+
+.totop{position:fixed;right:20px;bottom:20px;z-index:70;width:44px;height:44px;border-radius:50%;
+  background:var(--navy);color:#fff;display:grid;place-items:center;font-size:18px;box-shadow:var(--sh3);
+  opacity:0;pointer-events:none;transform:translateY(10px);transition:opacity .3s,transform .3s;border:none;cursor:pointer}
+.totop.show{opacity:1;pointer-events:auto;transform:none}
+.totop:hover{background:var(--navy-700)}
+
+@media(max-width:1000px){
+  .idx-grid{grid-template-columns:repeat(2,1fr)}
+  .view-grid{grid-template-columns:repeat(2,1fr)}
+  .sheet-body{grid-template-columns:1fr;gap:24px}
+  .view-list{grid-template-columns:1fr}
+}
+@media(max-width:820px){
+  body{font-size:14.5px}
+  .divider-in{flex-direction:column;align-items:flex-start;gap:6px}
+  .divider-num{align-self:flex-end;margin-top:-30px}
+  .ov thead{display:none}
+  .ov,.ov tbody,.ov tr,.ov td{display:block;width:100%}
+  .ov tbody tr.ov-row{padding:13px 14px;border-bottom:1px solid var(--border);position:relative}
+  .ov td{border:none;padding:2px 0}
+  .ov-name{padding-right:30px!important}
+  .ov-row .chev{position:absolute;right:8px;top:18px;margin:0}
+  .ov td.num,.ov td.ctr{display:inline-flex;align-items:baseline;gap:6px;width:auto;margin-right:16px;font-size:12.5px}
+  .ov td.num::before{content:attr(data-l);font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-subtle)}
+}
+@media(max-width:560px){
+  .idx-grid,.view-grid{grid-template-columns:1fr}
+}
+@media print{
+  .topnav,.totop{display:none}
+  .dwrap{grid-template-rows:1fr!important}
+  body{background:#fff}
+}
+</style>
+</head>
+<body id="top">
+
+<nav class="topnav"><div class="container nav-in">
+  <a class="brand" href="#top">LATAM <span>ConsultUs</span></a>
+  <div class="nav-links">
+    <a href="#panorama">House View</a>
+    <a href="#indice">Clientes</a>
+    <a href="#latam-consultus">LATAM ConsultUs</a>
+  </div>
+  <span class="nav-date">Abril 2026</span>
+</div></nav>
+
+<header class="hero"><div class="hero-bg"></div>
+<div class="container hero-in">
+  <div class="hero-brand">LATAM <span>ConsultUs</span></div>
+  <h1>Revisión de <strong>Estrategias</strong></h1>
+  <p class="hero-sub">Auditoría de las estrategias de inversión de Abril 2026 frente al house view interno: alineación, hallazgos cuantitativos y cambios sugeridos. Una ficha por estrategia, agrupadas por cliente, con veredicto y prioridad de revisión.</p>
+  <div class="hero-meta">
+    <div><span class="hm-v">~55<small>&nbsp;estrategias</small></span><span class="hm-l">Universo a revisar</span></div>
+    <div><span class="hm-v">15</span><span class="hm-l">Clientes</span></div>
+    <div><span class="hm-v">6–12<small>&nbsp;m</small></span><span class="hm-l">Horizonte house view</span></div>
+    <div><span class="hm-v">30-Abr-2026</span><span class="hm-l">Fecha de cierre</span></div>
+  </div>
+</div></header>
+
+<!-- ====================== PANORAMA: HOUSE VIEW ====================== -->
+<section class="panorama" id="panorama"><div class="container">
+  <div class="sec-head">
+    <span class="eyebrow">House view · Mayo 2026</span>
+    <h2>Pro-riesgo, pero con una <strong>vara de calidad más alta</strong></h2>
+    <p class="lede">Consenso institucional moderadamente pro-riesgo, con tres fuerzas dominantes: IA, fragmentación geopolítica e inflación más volátil. Las estrategias se evalúan contra esta vara.</p>
+  </div>
+
+  <div class="view-grid">
+    <article class="view-card">
+      <span class="lbl">Riesgo agregado</span>
+      <h4>OW moderado</h4>
+      <p>Preferencia por equities y activos reales, con diversificación más deliberada.</p>
+    </article>
+    <article class="view-card">
+      <span class="lbl">Motor dominante</span>
+      <h4>IA — infraestructura física</h4>
+      <p>Energía, chips, data centers, cooling, grid, cobre. No solo mega-cap tech.</p>
+    </article>
+    <article class="view-card">
+      <span class="lbl">Riesgo clave</span>
+      <h4>Inflación volátil</h4>
+      <p>Shocks de oferta debilitan el hedge tradicional stock-bond.</p>
+    </article>
+    <article class="view-card">
+      <span class="lbl">Escenario base</span>
+      <h4>60% probabilidad</h4>
+      <p>Crecimiento positivo, inflación sticky, Fed eventualmente recorta.</p>
+    </article>
+  </div>
+
+  <div class="view-list">
+    <div class="vli"><span class="tag ow">OW</span><span><strong>Global equities</strong> · earnings sostienen el ciclo, IA como motor</span></div>
+    <div class="vli"><span class="tag ow">OW</span><span><strong>EM equities selectivo</strong> · Norte Asia (semis/IA) + LatAm (commodities)</span></div>
+    <div class="vli"><span class="tag ow">OW</span><span><strong>Commodities</strong> · energía y cobre como hedge y beneficiarios</span></div>
+    <div class="vli"><span class="tag ow">OW</span><span><strong>Gold</strong> · hedge geopolítico e inflacionario</span></div>
+    <div class="vli"><span class="tag ow">OW</span><span><strong>Infraestructura / real assets</strong> · resiliencia inflacionaria</span></div>
+    <div class="vli"><span class="tag mod">MOD</span><span><strong>Japan</strong> · reformas corporativas, mejora estructural</span></div>
+    <div class="vli"><span class="tag mod">SEL</span><span><strong>High yield</strong> · selectivo, underwriting exigente</span></div>
+    <div class="vli"><span class="tag nw">NEU</span><span><strong>Fixed income core</strong> · carry sí, duration larga no</span></div>
+    <div class="vli"><span class="tag nw">NEU</span><span><strong>Investment grade credit</strong> · buen carry, spreads ajustados</span></div>
+    <div class="vli"><span class="tag nw">NEU</span><span><strong>Europe equities</strong> · valuaciones OK, energía pesa</span></div>
+    <div class="vli"><span class="tag uw">UW</span><span><strong>Duration larga US</strong> · term premium + déficits</span></div>
+    <div class="vli"><span class="tag uw">UW</span><span><strong>Private credit</strong> · iliquidez + opacidad de valuaciones</span></div>
+    <div class="vli"><span class="tag uw">UW</span><span><strong>Cash</strong> · útil táctico, malo estructural</span></div>
+  </div>
+</div></section>
+
+<!-- ====================== ÍNDICE DE CLIENTES ====================== -->
+<section class="idx" id="indice"><div class="container">
+  <div class="sec-head">
+    <span class="eyebrow">Índice por cliente</span>
+    <h2>15 clientes · <strong>~55 estrategias</strong></h2>
+    <p class="lede">Cada cliente tiene entre 1 y 5 estrategias. Hacé click en una tarjeta para saltar a la sección detallada. Solo LATAM ConsultUs tiene fichas completas en este piloto.</p>
+  </div>
+
+  <div class="idx-grid">
+    <a class="idx-card" href="#latam-consultus" style="--gc:var(--c-mod)">
+      <span class="idx-n">01</span>
+      <h3>LATAM ConsultUs</h3>
+      <p>5 estrategias: Conservadora, Moderada, Dinámica, Distributiva, 1MM Plus</p>
+      <div class="idx-foot"><span class="c">5<small>estrategias</small></span><span class="go">Ver →</span></div>
+    </a>
+    <article class="idx-card" style="--gc:var(--c-cons);opacity:.55">
+      <span class="idx-n">02</span>
+      <h3>Latin Securities</h3>
+      <p>4 estrategias · Pendiente de revisión</p>
+      <div class="idx-foot"><span class="c">4<small>estrategias</small></span><span class="go">Pendiente</span></div>
+    </article>
+    <article class="idx-card" style="--gc:var(--c-din);opacity:.55">
+      <span class="idx-n">03</span>
+      <h3>Capital Partners</h3>
+      <p>4 estrategias · Pendiente de revisión</p>
+      <div class="idx-foot"><span class="c">4<small>estrategias</small></span><span class="go">Pendiente</span></div>
+    </article>
+    <article class="idx-card" style="--gc:var(--c-otro);opacity:.55">
+      <span class="idx-n">04</span>
+      <h3>GWM</h3>
+      <p>4 estrategias · Pendiente de revisión</p>
+      <div class="idx-foot"><span class="c">4<small>estrategias</small></span><span class="go">Pendiente</span></div>
+    </article>
+    <article class="idx-card" style="--gc:var(--c-cons);opacity:.55">
+      <span class="idx-n">05</span>
+      <h3>BFG</h3>
+      <p>3 estrategias · Pendiente de revisión</p>
+      <div class="idx-foot"><span class="c">3<small>estrategias</small></span><span class="go">Pendiente</span></div>
+    </article>
+    <article class="idx-card" style="--gc:var(--c-mod);opacity:.55">
+      <span class="idx-n">06</span>
+      <h3>Banco Macro</h3>
+      <p>3 estrategias · Pendiente de revisión</p>
+      <div class="idx-foot"><span class="c">3<small>estrategias</small></span><span class="go">Pendiente</span></div>
+    </article>
+    <article class="idx-card" style="--gc:var(--c-din);opacity:.55">
+      <span class="idx-n">07</span>
+      <h3>FS Internacional</h3>
+      <p>5 estrategias · Pendiente</p>
+      <div class="idx-foot"><span class="c">5<small>estrategias</small></span><span class="go">Pendiente</span></div>
+    </article>
+    <article class="idx-card" style="--gc:var(--c-otro);opacity:.55">
+      <span class="idx-n">+</span>
+      <h3>Otros 8 clientes</h3>
+      <p>Andrés Picovsky · BAC · ITAU · Max Valores EFG · Max Valores MAX · Mónica y Sofía · Niveton · Unity · Winvest</p>
+      <div class="idx-foot"><span class="c">~27<small>estrategias</small></span><span class="go">Pendiente</span></div>
+    </article>
+  </div>
+</div></section>
+
+<!-- ====================== CLIENTE: LATAM CONSULTUS ====================== -->
+<section class="cat" id="latam-consultus" style="--gc:var(--c-mod)">
+  <div class="divider"><div class="container divider-in">
+    <div>
+      <span class="eyebrow">Cliente 01</span>
+      <h2>LATAM <strong>ConsultUs</strong></h2>
+      <p class="divider-meta">Plataforma MaximUs · 5 estrategias propias (Conservadora, Moderada, Dinámica, Distributiva, 1MM Plus). En este piloto solo se detalla la Moderada.</p>
+    </div>
+    <span class="divider-num">01</span>
+  </div></div>
+
+  <div class="container">
+
+    <!-- Tabla overview -->
+    <div class="ov-wrap">
+      <table class="ov">
+        <thead><tr>
+          <th>Estrategia</th>
+          <th>Perfil</th>
+          <th class="num">RF %</th>
+          <th class="num">RV %</th>
+          <th class="num">YTW</th>
+          <th class="num">Dur</th>
+          <th class="num">Ret 5Y</th>
+          <th class="num">DD 5Y</th>
+          <th class="ctr">Veredicto</th>
+        </tr></thead>
+        <tbody>
+
+          <tr class="ov-row pending">
+            <td class="ov-name"><span class="chev"></span><span class="ov-nm">LATAM ConsultUs Conservadora</span></td>
+            <td class="ov-cat">Conservador</td>
+            <td class="num neu" data-l="RF">—</td>
+            <td class="num neu" data-l="RV">—</td>
+            <td class="num neu" data-l="YTW">—</td>
+            <td class="num neu" data-l="Dur">—</td>
+            <td class="num neu" data-l="Ret5Y">—</td>
+            <td class="num neu" data-l="DD5Y">—</td>
+            <td class="ctr"><span class="vd pd">Pendiente</span></td>
+          </tr>
+
+          <tr class="ov-row" data-target="d-moderada">
+            <td class="ov-name"><span class="chev"></span><span class="ov-nm">LATAM ConsultUs Moderada</span><span class="ov-sub">USD 1.000.000 · 60/40</span></td>
+            <td class="ov-cat">Moderado</td>
+            <td class="num" data-l="RF">46.6</td>
+            <td class="num" data-l="RV">36.3</td>
+            <td class="num pos" data-l="YTW">6.78</td>
+            <td class="num" data-l="Dur">4.48</td>
+            <td class="num neg" data-l="Ret5Y">2.63</td>
+            <td class="num neg" data-l="DD5Y">-21.6</td>
+            <td class="ctr"><span class="vd wn">Atención</span></td>
+          </tr>
+          <tr class="ov-detail" id="d-moderada"><td colspan="9"><div class="dwrap"><div class="dinner">
+
+            <div class="sheet">
+
+              <div class="sheet-h">
+                <div class="sheet-h-l">
+                  <span class="sheet-grp">LATAM ConsultUs · Estrategia propia</span>
+                  <h3>LATAM ConsultUs <strong>Moderada</strong></h3>
+                  <div class="chips">
+                    <span class="chip"><span class="chip-ag">Perfil</span><span>Moderado</span></span>
+                    <span class="chip"><span class="chip-ag">BM</span><span>60/40</span></span>
+                    <span class="chip"><span class="chip-ag">AUM ref</span><span class="mono">USD 1.000.000</span></span>
+                    <span class="chip"><span class="chip-ag">Cierre</span><span>30-Abr-2026</span></span>
+                  </div>
+                </div>
+                <div class="sheet-h-r">
+                  <span class="vd wn">Atención · Prioridad Alta</span>
+                  <span class="sheet-grp" style="--gc:var(--warn)">Desalineada en 3 frentes</span>
+                </div>
+              </div>
+
+              <div class="sheet-body">
+
+                <!-- COLUMNA IZQ: Análisis cualitativo -->
+                <div class="sheet-thesis">
+
+                  <div class="block verdict">
+                    <span class="lbl">Veredicto</span>
+                    <p>Necesita rebalanceo significativo. Buen carry en renta fija pero estructuralmente desalineada con la house view: falta EM equities, faltan hedges inflacionarios (gold/commodities) y la calidad crediticia es agresiva para un perfil moderado. Performance 5Y y down-capture 107% confirman mala calibración para drawdowns.</p>
+                  </div>
+
+                  <div class="block">
+                    <span class="lbl">✅ Qué está bien</span>
+                    <ul class="findings good">
+                      <li><strong>Duration controlada (4.48 años)</strong> — coherente con el UW de duration larga US, evita riesgo de term premium.</li>
+                      <li><strong>YTW 6.78% vs 3.71% del BM</strong> — capturando el carry que el view marca atractivo.</li>
+                      <li><strong>Sesgo growth en RV (46%)</strong> — alineado con preferencia por US quality growth.</li>
+                      <li><strong>Sin private credit</strong> — coincide con UW selectivo.</li>
+                      <li><strong>Jupiter Merian (mkt neutral, vol cap 6%)</strong> aporta hedge no correlacionado.</li>
+                    </ul>
+                  </div>
+
+                  <div class="block">
+                    <span class="lbl">⚠️ Problemas detectados</span>
+                    <ul class="findings bad">
+                      <li><strong>Calidad crediticia agresiva para "Moderada":</strong> BBB 25% + BB 19% + B 13.6% + CCC 2.55% = ~60% IG borderline o sub-IG vs 23% del benchmark. Explica el down-capture 110%.</li>
+                      <li><strong>UW equities 4 pts vs BM</strong> justo cuando la house view marca OW global equities — corto de riesgo donde más conviccional.</li>
+                      <li><strong>Cero exposición a EM equities</strong> — el view dice OW EM selectivo (Norte Asia + LatAm). Único non-US es JPM Europe (2.5%).</li>
+                      <li><strong>Cero gold, cero commodities, cero infraestructura</strong> — tres OW del view ausentes. Sin hedge inflacionario real.</li>
+                      <li><strong>Sectorial RF: 59% corporate + 21% securitized = 80% spread products</strong> vs 62% government del BM. PIMCO Income + Schroder Credit + Vontobel + Man HY se superponen.</li>
+                      <li><strong>Performance 5Y: 2.63% vs BM 4.86%; Sharpe 5Y -0.16 vs 0.11; DD 5Y -21.6% vs -18.6%.</strong> Capture 89% up / 107% down: peor relación riesgo/retorno que el BM.</li>
+                      <li><strong>Virtus US Small Cap (5%):</strong> Ret 5Y -0.93%, Sharpe 3Y -0.10, DD -33.6%. Destruye valor sostenidamente.</li>
+                      <li><strong>JPM Europe Equity Plus Hdg (2.5%):</strong> tamaño irrelevante. O sube a peso que mueva la aguja o sale.</li>
+                      <li><strong>Correlación PIMCO Income ↔ Schroder Credit = 0.94</strong> — dos fondos haciendo lo mismo, no diversifican.</li>
+                    </ul>
+                  </div>
+
+                  <div class="block">
+                    <span class="lbl">🔄 Cambios sugeridos</span>
+                    <div class="changes">
+                      <table>
+                        <thead><tr><th>Acción</th><th>Posición</th><th>De</th><th>A</th><th>Razón</th></tr></thead>
+                        <tbody>
+                          <tr><td class="dir dn">Bajar</td><td class="act">PIMCO Income + Schroder Credit + Vontobel</td><td class="num">27.5%</td><td class="num">22.5%</td><td>Solapamiento real (corr 0.94/0.95)</td></tr>
+                          <tr><td class="dir dn">Bajar</td><td class="act">Man GLG High Yield</td><td class="num">5%</td><td class="num">2.5%</td><td>HY selectivo en view; underwriting exigente</td></tr>
+                          <tr><td class="dir new">Sumar</td><td class="act">TIPS / short-dated treasuries</td><td class="num">0%</td><td class="num">5%</td><td>Hedge inflacionario que el view pide</td></tr>
+                          <tr><td class="dir sw">Rotar</td><td class="act">Virtus US Small Cap → EM Equity selectivo</td><td class="num">5%</td><td class="num">3-5%</td><td>Small cap no es high conviction; EM Norte Asia/LatAm sí</td></tr>
+                          <tr><td class="dir new">Sumar</td><td class="act">IA-infraestructura física (cobre/grid/REITs IA/semis)</td><td class="num">0%</td><td class="num">5%</td><td>High conviction del view</td></tr>
+                          <tr><td class="dir sw">Decidir</td><td class="act">JPM Europe Hdg</td><td class="num">2.5%</td><td class="num">0 ó 5%</td><td>Europe Neutral en view; el tamaño actual no mueve</td></tr>
+                          <tr><td class="dir new">Sumar</td><td class="act">Oro</td><td class="num">0%</td><td class="num">3-5%</td><td>OW moderado en view</td></tr>
+                          <tr><td class="dir new">Sumar</td><td class="act">Commodities broad / energy</td><td class="num">0%</td><td class="num">3%</td><td>OW en view</td></tr>
+                          <tr><td class="dir up">Subir</td><td class="act">RV global total</td><td class="num">36.3%</td><td class="num">40-42%</td><td>Alinear con OW global equities</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- COLUMNA DER: Data -->
+                <div class="sheet-data">
+
+                  <div class="data-grp full">
+                    <span class="grp-t">Composición vs benchmark 60/40</span>
+                    <div class="alloc">
+                      <div class="alloc-bar">
+                        <span style="width:46.6%;background:var(--c-cons)"></span>
+                        <span style="width:36.3%;background:var(--c-din)"></span>
+                        <span style="width:7.5%;background:var(--c-otro)"></span>
+                        <span style="width:7.5%;background:var(--c-mod)"></span>
+                        <span style="width:2.0%;background:var(--g3)"></span>
+                      </div>
+                      <div class="alloc-leg">
+                        <div><i style="background:var(--c-cons)"></i>Renta Fija <b>46.6%</b></div>
+                        <div><i style="background:var(--c-din)"></i>Renta Variable <b>36.3%</b></div>
+                        <div><i style="background:var(--c-otro)"></i>Alternativo (Jupiter Merian) <b>7.5%</b></div>
+                        <div><i style="background:var(--c-mod)"></i>Mixed (Man AHL) <b>7.5%</b></div>
+                        <div><i style="background:var(--g3)"></i>Cash <b>2.0%</b></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="data-grp">
+                    <span class="grp-t">Renta Fija</span>
+                    <dl>
+                      <div class="dl"><dt>YTW</dt><dd class="strong">6.78%</dd></div>
+                      <div class="dl"><dt>YTW BM</dt><dd>3.71%</dd></div>
+                      <div class="dl"><dt>Duration</dt><dd>4.48 a</dd></div>
+                      <div class="dl"><dt>Duration BM</dt><dd>6.21 a</dd></div>
+                      <div class="dl"><dt>Corporate</dt><dd>59.4%</dd></div>
+                      <div class="dl"><dt>Government</dt><dd>21.0%</dd></div>
+                      <div class="dl"><dt>Securitized</dt><dd>21.0%</dd></div>
+                      <div class="dl"><dt>IG (AAA-A)</dt><dd>40.7%</dd></div>
+                      <div class="dl"><dt>Sub-IG (BB-CCC)</dt><dd class="neg">35.2%</dd></div>
+                    </dl>
+                  </div>
+
+                  <div class="data-grp">
+                    <span class="grp-t">Renta Variable</span>
+                    <dl>
+                      <div class="dl"><dt>P/E</dt><dd>23.3</dd></div>
+                      <div class="dl"><dt>P/B</dt><dd>4.93</dd></div>
+                      <div class="dl"><dt>P/S</dt><dd>3.69</dd></div>
+                      <div class="dl"><dt>North America</dt><dd>74.5%</dd></div>
+                      <div class="dl"><dt>Europe dev.</dt><dd>14.8%</dd></div>
+                      <div class="dl"><dt>EM</dt><dd class="neg">~0%</dd></div>
+                      <div class="dl"><dt>Growth</dt><dd>46.0%</dd></div>
+                      <div class="dl"><dt>Blend</dt><dd>35.2%</dd></div>
+                      <div class="dl"><dt>Value</dt><dd>18.8%</dd></div>
+                      <div class="dl"><dt>Tech</dt><dd>29.5%</dd></div>
+                      <div class="dl"><dt>Industrials</dt><dd>21.6%</dd></div>
+                    </dl>
+                  </div>
+
+                  <div class="data-grp full">
+                    <span class="grp-t">Performance &amp; riesgo vs BM 60/40</span>
+                    <dl>
+                      <div class="dl"><dt>Ret 1M</dt><dd class="pos">4.30%</dd></div>
+                      <div class="dl"><dt>Ret 1M BM</dt><dd>3.95%</dd></div>
+                      <div class="dl"><dt>Ret 1Y</dt><dd class="pos">12.30%</dd></div>
+                      <div class="dl"><dt>Ret 1Y BM</dt><dd>13.54%</dd></div>
+                      <div class="dl"><dt>Ret 3Y</dt><dd>9.23%</dd></div>
+                      <div class="dl"><dt>Ret 3Y BM</dt><dd>10.30%</dd></div>
+                      <div class="dl"><dt>Ret 5Y</dt><dd class="neg">2.63%</dd></div>
+                      <div class="dl"><dt>Ret 5Y BM</dt><dd>4.86%</dd></div>
+                      <div class="dl"><dt>Vol 5Y</dt><dd class="neg">8.88%</dd></div>
+                      <div class="dl"><dt>Vol 5Y BM</dt><dd>6.99%</dd></div>
+                      <div class="dl"><dt>Sharpe 5Y</dt><dd class="neg">-0.16</dd></div>
+                      <div class="dl"><dt>Sharpe 5Y BM</dt><dd>0.11</dd></div>
+                      <div class="dl"><dt>Max DD 5Y</dt><dd class="neg">-21.60%</dd></div>
+                      <div class="dl"><dt>Max DD 5Y BM</dt><dd>-18.64%</dd></div>
+                      <div class="dl"><dt>Up capture 5Y</dt><dd>89.5%</dd></div>
+                      <div class="dl"><dt>Down capture 5Y</dt><dd class="neg">107.2%</dd></div>
+                    </dl>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div></div></td></tr>
+
+          <tr class="ov-row pending">
+            <td class="ov-name"><span class="chev"></span><span class="ov-nm">LATAM ConsultUs Dinámica</span></td>
+            <td class="ov-cat">Dinámico</td>
+            <td class="num neu" data-l="RF">—</td>
+            <td class="num neu" data-l="RV">—</td>
+            <td class="num neu" data-l="YTW">—</td>
+            <td class="num neu" data-l="Dur">—</td>
+            <td class="num neu" data-l="Ret5Y">—</td>
+            <td class="num neu" data-l="DD5Y">—</td>
+            <td class="ctr"><span class="vd pd">Pendiente</span></td>
+          </tr>
+
+          <tr class="ov-row pending">
+            <td class="ov-name"><span class="chev"></span><span class="ov-nm">LATAM ConsultUs Distributiva</span></td>
+            <td class="ov-cat">Distributivo</td>
+            <td class="num neu" data-l="RF">—</td>
+            <td class="num neu" data-l="RV">—</td>
+            <td class="num neu" data-l="YTW">—</td>
+            <td class="num neu" data-l="Dur">—</td>
+            <td class="num neu" data-l="Ret5Y">—</td>
+            <td class="num neu" data-l="DD5Y">—</td>
+            <td class="ctr"><span class="vd pd">Pendiente</span></td>
+          </tr>
+
+          <tr class="ov-row pending">
+            <td class="ov-name"><span class="chev"></span><span class="ov-nm">LATAM ConsultUs 1MM Plus</span></td>
+            <td class="ov-cat">Patrimonio alto</td>
+            <td class="num neu" data-l="RF">—</td>
+            <td class="num neu" data-l="RV">—</td>
+            <td class="num neu" data-l="YTW">—</td>
+            <td class="num neu" data-l="Dur">—</td>
+            <td class="num neu" data-l="Ret5Y">—</td>
+            <td class="num neu" data-l="DD5Y">—</td>
+            <td class="ctr"><span class="vd pd">Pendiente</span></td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</section>
+
+<!-- ====================== CLOSING ====================== -->
+<footer class="closing"><div class="container closing-in">
+  <div class="closing-brand">LATAM <span>ConsultUs</span></div>
+  <div class="closing-headline">Una revisión<br><strong>vale lo que cuesta cambiar.</strong></div>
+  <div class="closing-rule"></div>
+  <p style="color:#cbd9e8;font-weight:300;max-width:60ch;font-size:15.5px;line-height:1.62">
+    Este documento contrasta cada estrategia con el house view interno y propone cambios concretos. La prioridad de revisión surge del nivel de desalineación detectado, no del tamaño del cliente.
+  </p>
+  <div class="disclaimer">
+    <p>Documento interno de uso exclusivo para el equipo de LATAM ConsultUs. Los valores citados corresponden al cierre del 30 de abril de 2026 según los Informes de Gestión y PPTs de cada estrategia. Las opiniones expresadas son análisis técnico interno y no constituyen recomendación de inversión para clientes finales. Cualquier cambio en cartera debe ser validado por el comité de inversiones.</p>
+  </div>
+</div></footer>
+
+<button class="totop" id="totop" aria-label="Volver arriba">↑</button>
+
+<script>
+// Expand/collapse rows
+document.querySelectorAll('.ov-row[data-target]').forEach(row=>{
+  row.addEventListener('click',()=>{
+    const id=row.getAttribute('data-target');
+    const det=document.getElementById(id);
+    const open=row.classList.toggle('open');
+    if(det){det.classList.toggle('open',open)}
+  });
+});
+
+// Back-to-top
+const tt=document.getElementById('totop');
+window.addEventListener('scroll',()=>{
+  tt.classList.toggle('show',window.scrollY>600);
+});
+tt.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+</script>
+
+</body>
+</html>
