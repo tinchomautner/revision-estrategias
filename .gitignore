@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.venv/
+# Datos internos: catálogos de fondos/ETFs y house view interno — solo local
+data/
