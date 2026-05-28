@@ -1312,6 +1312,20 @@ def render_detail(s: dict, det_id: str) -> str:
     co_w = ana.get("com") or 0
     ca_w = ana.get("cash") or 0
     ot_w = (agg.get("s_aa_otros") or 0) + (agg.get("s_aa_derivados") or 0)
+
+    # Leyenda solo con buckets con peso significativo (>= 1%); evita ruido visual de "Commodities 0.0%"
+    leg_items = [
+        (rf_w, "var(--c-cons)", "Renta Fija"),
+        (rv_w, "var(--c-din)",  "Renta Variable"),
+        (co_w, "var(--c-otro)", "Commodities"),
+        (ot_w, "var(--c-mod)",  "Otros/Alternativos"),
+        (ca_w, "var(--g3)",     "Cash"),
+    ]
+    leg_html = "".join(
+        f'<div><i style="background:{color}"></i>{label} <b>{fmt_raw(w)}%</b></div>'
+        for w, color, label in leg_items if w >= 1.0
+    )
+
     bar_html = (
         '<div class="alloc-bar">'
         f'<span style="width:{rf_w:.1f}%;background:var(--c-cons)"></span>'
@@ -1320,44 +1334,46 @@ def render_detail(s: dict, det_id: str) -> str:
         f'<span style="width:{ot_w:.1f}%;background:var(--c-mod)"></span>'
         f'<span style="width:{ca_w:.1f}%;background:var(--g3)"></span>'
         '</div>'
-        '<div class="alloc-leg">'
-        f'<div><i style="background:var(--c-cons)"></i>Renta Fija <b>{fmt_raw(rf_w)}%</b></div>'
-        f'<div><i style="background:var(--c-din)"></i>Renta Variable <b>{fmt_raw(rv_w)}%</b></div>'
-        f'<div><i style="background:var(--c-otro)"></i>Commodities <b>{fmt_raw(co_w)}%</b></div>'
-        f'<div><i style="background:var(--c-mod)"></i>Otros/Alternativos <b>{fmt_raw(ot_w)}%</b></div>'
-        f'<div><i style="background:var(--g3)"></i>Cash <b>{fmt_raw(ca_w)}%</b></div>'
-        '</div>'
+        f'<div class="alloc-leg">{leg_html}</div>'
     )
 
-    # RF block
-    rf_block = (
-        '<div class="data-grp"><span class="grp-t">Renta Fija</span><dl>'
-        f'<div class="dl"><dt>YTW</dt><dd class="strong">{fmt_raw(ana.get("ytw"),2,"%")}</dd></div>'
-        f'<div class="dl"><dt>Duration</dt><dd>{fmt_raw(ana.get("dur"),2," a")}</dd></div>'
-        f'<div class="dl"><dt>Corporate</dt><dd>{fmt_raw(agg.get("f_sec_corp"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Government</dt><dd>{fmt_raw(agg.get("f_sec_gov"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Securitized</dt><dd>{fmt_raw(agg.get("f_sec_securitized"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>IG (AAA-BBB)</dt><dd>{fmt_raw(ana.get("ig_rf"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Sub-IG (BB-CCC+NR)</dt><dd class="neg">{fmt_raw(ana.get("sub_ig_rf"),1,"%")}</dd></div>'
-        '</dl></div>'
-    )
+    # Auto-show RF block: solo si la estrategia tiene exposición material (>= 5%)
+    show_rf = rf_w >= 5
+    show_rv = rv_w >= 5
+    # Si solo queda 1 bloque visible, ocupa todo el ancho
+    grp_class = "data-grp full" if (show_rf ^ show_rv) else "data-grp"
 
-    # RV block
-    rv_block = (
-        '<div class="data-grp"><span class="grp-t">Renta Variable</span><dl>'
-        f'<div class="dl"><dt>P/E</dt><dd>{fmt_raw(agg.get("e_ind_pe"),1)}</dd></div>'
-        f'<div class="dl"><dt>P/B</dt><dd>{fmt_raw(agg.get("e_ind_pb"),2)}</dd></div>'
-        f'<div class="dl"><dt>P/S</dt><dd>{fmt_raw(agg.get("e_ind_ps"),2)}</dd></div>'
-        f'<div class="dl"><dt>North America</dt><dd>{fmt_raw(ana.get("eq_na"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Europe dev.</dt><dd>{fmt_raw(ana.get("eq_europe"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>EM (LA+EurE+China+AsiaE)</dt><dd>{fmt_raw(ana.get("eq_em"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Growth</dt><dd>{fmt_raw(agg.get("rv_growth"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Blend</dt><dd>{fmt_raw(agg.get("rv_blend"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Value</dt><dd>{fmt_raw(agg.get("rv_value"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Tech</dt><dd>{fmt_raw(ana.get("tech"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Industrials</dt><dd>{fmt_raw(ana.get("ind"),1,"%")}</dd></div>'
-        '</dl></div>'
-    )
+    rf_block = ""
+    if show_rf:
+        rf_block = (
+            f'<div class="{grp_class}"><span class="grp-t">Renta Fija</span><dl>'
+            f'<div class="dl"><dt>YTW</dt><dd class="strong">{fmt_raw(ana.get("ytw"),2,"%")}</dd></div>'
+            f'<div class="dl"><dt>Duration</dt><dd>{fmt_raw(ana.get("dur"),2," a")}</dd></div>'
+            f'<div class="dl"><dt>Corporate</dt><dd>{fmt_raw(agg.get("f_sec_corp"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Government</dt><dd>{fmt_raw(agg.get("f_sec_gov"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Securitized</dt><dd>{fmt_raw(agg.get("f_sec_securitized"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>IG (AAA-BBB)</dt><dd>{fmt_raw(ana.get("ig_rf"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Sub-IG (BB-CCC+NR)</dt><dd class="neg">{fmt_raw(ana.get("sub_ig_rf"),1,"%")}</dd></div>'
+            '</dl></div>'
+        )
+
+    rv_block = ""
+    if show_rv:
+        rv_block = (
+            f'<div class="{grp_class}"><span class="grp-t">Renta Variable</span><dl>'
+            f'<div class="dl"><dt>P/E</dt><dd>{fmt_raw(agg.get("e_ind_pe"),1)}</dd></div>'
+            f'<div class="dl"><dt>P/B</dt><dd>{fmt_raw(agg.get("e_ind_pb"),2)}</dd></div>'
+            f'<div class="dl"><dt>P/S</dt><dd>{fmt_raw(agg.get("e_ind_ps"),2)}</dd></div>'
+            f'<div class="dl"><dt>North America</dt><dd>{fmt_raw(ana.get("eq_na"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Europa</dt><dd>{fmt_raw(ana.get("eq_europe"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Emerging Markets</dt><dd>{fmt_raw(ana.get("eq_em"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Growth</dt><dd>{fmt_raw(agg.get("rv_growth"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Blend</dt><dd>{fmt_raw(agg.get("rv_blend"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Value</dt><dd>{fmt_raw(agg.get("rv_value"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Tech</dt><dd>{fmt_raw(ana.get("tech"),1,"%")}</dd></div>'
+            f'<div class="dl"><dt>Industrials</dt><dd>{fmt_raw(ana.get("ind"),1,"%")}</dd></div>'
+            '</dl></div>'
+        )
 
     # Performance & riesgo vs BM (datos reales del PDF, página 7)
     perf = s.get("perf") or {}
