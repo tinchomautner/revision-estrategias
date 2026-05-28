@@ -350,10 +350,10 @@ def discover_strategies() -> list[dict]:
 # ---------------------------------------------------------------------------
 # 3. PARSEAR PDFs — composición de la estrategia
 # ---------------------------------------------------------------------------
-def parse_pdf_holdings(pdf_path: str) -> tuple[list[tuple[str, float, str]], dict]:
-    """Devuelve (lista de (isin, peso, nombre)) + metadata de las páginas
-    relevantes (RF/RV/perf declarados)."""
-    holdings: list[tuple[str, float, str]] = []
+def parse_pdf_holdings(pdf_path: str) -> tuple[list[tuple], dict]:
+    """Devuelve (lista de (isin, peso, nombre, ret_3y, ret_5y)) + metadata de las páginas
+    relevantes (RF/RV/perf declarados). ret_3y / ret_5y pueden ser None."""
+    holdings: list[tuple] = []
     meta: dict = {}
     try:
         with pdfplumber.open(pdf_path) as pdf:
@@ -392,9 +392,12 @@ def parse_pdf_holdings(pdf_path: str) -> tuple[list[tuple[str, float, str]], dic
     return holdings, meta
 
 
-def _parse_holdings_text(txt: str) -> list[tuple[str, float, str]]:
-    """Aplica LINE_RE línea por línea sobre el texto de la página de composición."""
-    out: list[tuple[str, float, str]] = []
+def _parse_holdings_text(txt: str) -> list[tuple]:
+    """Aplica LINE_RE línea por línea sobre el texto de la página de composición.
+    Además extrae los floats trailing (Ret_1m, Ret_YTD, Ret_1y, Ret_3y, Ret_5y, ...)
+    para devolver también Ret_3y y Ret_5y."""
+    out: list[tuple] = []
+    nums_re = re.compile(r'-?\d+\.\d+')
     # Algunos nombres ocupan dos líneas (el filename del fondo) — pdfplumber suele
     # poner todo en una sola línea, pero a veces parte el "Nombre del fondo".
     # Estrategia: regex directo por línea, ya filtra por '-' o dígito tras nombre.
@@ -405,7 +408,25 @@ def _parse_holdings_text(txt: str) -> list[tuple[str, float, str]]:
         peso = float(m.group(1))
         isin = m.group(2)
         nombre = m.group(3).strip()
-        out.append((isin, peso, nombre))
+        # Trailing floats: tomamos todos los floats de la línea, descartamos el
+        # primero (peso) y nos quedamos con los métricos. Índices 0..4 son
+        # Ret_1m, Ret_YTD, Ret_1y, Ret_3y, Ret_5y.
+        all_nums = nums_re.findall(line)
+        ret_3y = None
+        ret_5y = None
+        # Removemos la primera ocurrencia (peso) — todas las demás son métricas
+        # (los Ret pueden ser negativos, con punto decimal).
+        metrics = all_nums[1:] if all_nums else []
+        if len(metrics) >= 5:
+            try:
+                ret_3y = float(metrics[3])
+            except ValueError:
+                pass
+            try:
+                ret_5y = float(metrics[4])
+            except ValueError:
+                pass
+        out.append((isin, peso, nombre, ret_3y, ret_5y))
     return out
 
 
@@ -428,16 +449,52 @@ def _is_benchmark_line(line: str) -> bool:
 
 def _extract_perf_from_text(txt: str) -> dict:
     """Intenta extraer perf+riesgo de un texto. Si no hay líneas con 7 y 10
-    floats no-BM, devuelve None (señal para seguir buscando)."""
+    floats no-BM, devuelve None (señal para seguir buscando).
+
+    También extrae los valores del benchmark (líneas que matchean BM) con
+    el mismo formato (7 o 10 floats), si están presentes."""
     perf = {"ret_5y": None, "ret_3y": None, "ret_1y": None}
     risk = {"vol_5y": None, "sharpe_5y": None,
             "dd_5y": None, "dd_3y": None,
             "up_5y": None, "dn_5y": None}
+    bm_perf = {"bm_ret_5y": None, "bm_ret_3y": None, "bm_ret_1y": None}
+    bm_risk = {"bm_vol_5y": None, "bm_sharpe_5y": None,
+               "bm_dd_5y": None, "bm_dd_3y": None,
+               "bm_up_5y": None, "bm_dn_5y": None}
 
     for line in txt.split("\n"):
-        if _is_benchmark_line(line):
-            continue
+        is_bm = _is_benchmark_line(line)
         nums = _FLOAT_RE.findall(line)
+        if is_bm:
+            if len(nums) == 7 and bm_perf["bm_ret_5y"] is None:
+                try:
+                    fnums = [float(x) for x in nums]
+                    bm_perf["bm_ret_1y"] = fnums[4]
+                    bm_perf["bm_ret_3y"] = fnums[5]
+                    bm_perf["bm_ret_5y"] = fnums[6]
+                except ValueError:
+                    pass
+            elif len(nums) == 10 and bm_risk["bm_vol_5y"] is None:
+                try:
+                    fnums = [float(x) for x in nums]
+                    bm_risk["bm_vol_5y"] = fnums[1]
+                    bm_risk["bm_sharpe_5y"] = fnums[3]
+                    bm_risk["bm_dd_3y"] = fnums[4]
+                    bm_risk["bm_dd_5y"] = fnums[5]
+                    bm_risk["bm_up_5y"] = fnums[7]
+                    bm_risk["bm_dn_5y"] = fnums[9]
+                except ValueError:
+                    pass
+            elif len(nums) == 6 and bm_risk["bm_vol_5y"] is None and re.search(r'-\s+-\s+-\s+-\s*$', line):
+                try:
+                    fnums = [float(x) for x in nums]
+                    bm_risk["bm_vol_5y"] = fnums[1]
+                    bm_risk["bm_sharpe_5y"] = fnums[3]
+                    bm_risk["bm_dd_3y"] = fnums[4]
+                    bm_risk["bm_dd_5y"] = fnums[5]
+                except ValueError:
+                    pass
+            continue
         if len(nums) == 7 and perf["ret_5y"] is None:
             try:
                 fnums = [float(x) for x in nums]
@@ -469,9 +526,8 @@ def _extract_perf_from_text(txt: str) -> dict:
                 # up/dn quedan en None
             except ValueError:
                 pass
-        if perf["ret_5y"] is not None and risk["vol_5y"] is not None:
-            break
-    return {**perf, **risk}
+        # No rompemos cuando termina la estrategia: seguimos buscando líneas BM
+    return {**perf, **risk, **bm_perf, **bm_risk}
 
 
 def parse_performance_metrics(pdf_path: str) -> dict:
@@ -485,6 +541,10 @@ def parse_performance_metrics(pdf_path: str) -> dict:
         "vol_5y": None, "sharpe_5y": None,
         "dd_5y": None, "dd_3y": None,
         "up_5y": None, "dn_5y": None,
+        "bm_ret_5y": None, "bm_ret_3y": None, "bm_ret_1y": None,
+        "bm_vol_5y": None, "bm_sharpe_5y": None,
+        "bm_dd_5y": None, "bm_dd_3y": None,
+        "bm_up_5y": None, "bm_dn_5y": None,
     }
     try:
         with pdfplumber.open(pdf_path) as pdf:
@@ -523,7 +583,7 @@ def parse_performance_metrics(pdf_path: str) -> dict:
 # ---------------------------------------------------------------------------
 # 4. COMPOSICIÓN PONDERADA
 # ---------------------------------------------------------------------------
-def aggregate(holdings: list[tuple[str, float, str]], catalog: dict) -> dict:
+def aggregate(holdings: list[tuple], catalog: dict) -> dict:
     """Pondera todas las métricas por peso. Hay dos clases de campos:
       - Asset allocation (s_aa_*): % del fondo en cada bucket → se pondera por peso/100.
       - Índices RF (f_ind_*, f_cacr_*, f_sec_*, f_geo_*): % dentro del bucket RF del fondo →
@@ -542,7 +602,7 @@ def aggregate(holdings: list[tuple[str, float, str]], catalog: dict) -> dict:
     if not holdings:
         return res
 
-    total_w = sum(p for _, p, _ in holdings)
+    total_w = sum(h[1] for h in holdings)
     res["_weight_total"] = total_w
 
     # Acumuladores con su peso efectivo (para luego normalizar)
@@ -563,7 +623,13 @@ def aggregate(holdings: list[tuple[str, float, str]], catalog: dict) -> dict:
                if c.startswith(("e_ind_", "e_geo_", "e_sec_", "rv_"))}
     CO_COLS = {c for c in METRIC_COLS if c.startswith("c_ti_")}
 
-    for isin, peso, nombre in holdings:
+    for h in holdings:
+        # Soportar tanto (isin, peso, nombre) como (isin, peso, nombre, ret3y, ret5y)
+        if len(h) >= 5:
+            isin, peso, nombre, ret_3y, ret_5y = h[0], h[1], h[2], h[3], h[4]
+        else:
+            isin, peso, nombre = h[0], h[1], h[2]
+            ret_3y, ret_5y = None, None
         fund = catalog.get(isin)
         if not fund:
             res["_missing_isins"].append((isin, peso, nombre))
@@ -618,6 +684,8 @@ def aggregate(holdings: list[tuple[str, float, str]], catalog: dict) -> dict:
             "sub": sub,
             "categoria": fund.get("categoria"),
             "asset_class": fund.get("asset_class"),
+            "ret_3y": ret_3y,
+            "ret_5y": ret_5y,
         })
 
     # Normalizar RF / RV / CO por su peso total efectivo
@@ -1132,7 +1200,7 @@ def _balance_excess(recs: list[dict], holdings_detail: list, agg: dict, gap_neg:
     return gap_neg
 
 
-def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
+def recommend(agg: dict, perfil: str, holdings: list[tuple],
               catalog: dict) -> list[dict]:
     """Genera una lista de cambios sugeridos concretos basándose en la
     composición agregada vs house view.
@@ -1147,7 +1215,7 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
 
     # ISINs ya en cartera — para que pick_trl_fund evite sugerir fondos
     # que el cliente ya tiene
-    current_isins = {isin for isin, _peso, _nombre in holdings}
+    current_isins = {h[0] for h in holdings}
 
     recs: list[dict] = []
     # Evitar duplicar ajustes sobre la misma posición + dirección
@@ -1533,13 +1601,20 @@ def render_detail(s: dict, det_id: str) -> str:
     agg = s["agg"]
     perfil = s["perfil"]
 
-    # Top holdings
+    # Top holdings — con Ret 3Y y Ret 5Y en lugar de Sub-categoría
+    def _ret_cell(v):
+        if v is None:
+            return '<td class="num neu">—</td>'
+        cls = "pos" if v >= 0 else "neg"
+        return f'<td class="num {cls}">{v:.2f}%</td>'
+
     hold_rows = ""
     for h in sorted(agg.get("_holdings", []), key=lambda x: -x["peso"])[:15]:
         hold_rows += (
             f'<tr><td class="num">{h["peso"]:.2f}%</td>'
             f'<td>{html.escape(h["nombre"][:64])}</td>'
-            f'<td>{html.escape(str(h.get("sub") or "—")[:32])}</td></tr>'
+            f'{_ret_cell(h.get("ret_3y"))}'
+            f'{_ret_cell(h.get("ret_5y"))}</tr>'
         )
     missing = agg.get("_missing_isins") or []
     miss_html = ""
@@ -1665,32 +1740,60 @@ def render_detail(s: dict, det_id: str) -> str:
             '</dl></div>'
         )
 
-    # Performance & riesgo vs BM (datos reales del PDF, página 7)
+    # Performance & riesgo vs BM (datos reales del PDF, página 7) — tabla 2 columnas
     perf = s.get("perf") or {}
-    def _perf_dd(label, v, digits=2, suffix="%"):
-        if v is None:
-            return f'<div class="dl"><dt>{label}</dt><dd>—</dd></div>'
-        cls = "pos" if v >= 0 else "neg"
-        return f'<div class="dl"><dt>{label}</dt><dd class="{cls}">{fmt_raw(v, digits, suffix)}</dd></div>'
 
+    def _strat_cell(v, signed=True, digits=2, suffix="%"):
+        """Estrategia: bold + color si signed=True, sin color si signed=False (vol/up/dn)."""
+        if v is None:
+            return '<td class="s">—</td>'
+        if signed:
+            cls = "s pos" if v >= 0 else "s neg"
+            return f'<td class="{cls}">{fmt_raw(v, digits, suffix)}</td>'
+        return f'<td class="s">{fmt_raw(v, digits, suffix)}</td>'
+
+    def _bm_cell(v, signed=True, digits=2, suffix="%"):
+        """Benchmark: color suave si signed, sin color si no. Sin bold."""
+        if v is None:
+            return '<td>—</td>'
+        if signed:
+            cls = "pos" if v >= 0 else "neg"
+            return f'<td class="{cls}">{fmt_raw(v, digits, suffix)}</td>'
+        return f'<td>{fmt_raw(v, digits, suffix)}</td>'
+
+    perf_rows = [
+        ("Ret 1Y",        "ret_1y",     "bm_ret_1y",     True),
+        ("Ret 3Y",        "ret_3y",     "bm_ret_3y",     True),
+        ("Ret 5Y",        "ret_5y",     "bm_ret_5y",     True),
+        ("Vol 5Y",        "vol_5y",     "bm_vol_5y",     False),
+        ("Sharpe 5Y",     "sharpe_5y",  "bm_sharpe_5y",  True),
+        ("Max DD 3Y",     "dd_3y",      "bm_dd_3y",      True),
+        ("Max DD 5Y",     "dd_5y",      "bm_dd_5y",      True),
+        ("Up Capture 5Y", "up_5y",      "bm_up_5y",      False),
+        ("Down Capture 5Y","dn_5y",     "bm_dn_5y",      False),
+    ]
+    perf_rows_html = ""
+    for label, s_key, b_key, signed in perf_rows:
+        sv = perf.get(s_key)
+        bv = perf.get(b_key)
+        perf_rows_html += (
+            f'<tr><td>{label}</td>'
+            f'{_strat_cell(sv, signed)}'
+            f'{_bm_cell(bv, signed)}'
+            f'</tr>'
+        )
     perf_block = (
-        '<div class="data-grp full"><span class="grp-t">Performance & riesgo vs BM</span><dl>'
-        + _perf_dd("Ret 1Y", perf.get("ret_1y"))
-        + _perf_dd("Ret 3Y", perf.get("ret_3y"))
-        + _perf_dd("Ret 5Y", perf.get("ret_5y"))
-        + f'<div class="dl"><dt>Vol 5Y</dt><dd>{fmt_raw(perf.get("vol_5y"),2,"%")}</dd></div>'
-        + _perf_dd("Sharpe 5Y", perf.get("sharpe_5y"))
-        + _perf_dd("Max DD 3Y", perf.get("dd_3y"))
-        + _perf_dd("Max DD 5Y", perf.get("dd_5y"))
-        + f'<div class="dl"><dt>Up Capture 5Y</dt><dd>{fmt_raw(perf.get("up_5y"),2,"%")}</dd></div>'
-        + f'<div class="dl"><dt>Down Capture 5Y</dt><dd>{fmt_raw(perf.get("dn_5y"),2,"%")}</dd></div>'
-        + '</dl></div>'
+        '<div class="data-grp full"><span class="grp-t">Performance & riesgo vs BM</span>'
+        '<table class="perftab">'
+        '<thead><tr><th></th><th>Estrategia</th><th>Benchmark</th></tr></thead>'
+        f'<tbody>{perf_rows_html}</tbody>'
+        '</table></div>'
     )
 
     holdings_block = (
         '<div class="data-grp full"><span class="grp-t">Holdings (top 15)</span>'
         '<div class="changes"><table>'
-        '<thead><tr><th>Peso</th><th>Posición</th><th>Sub-categoría</th></tr></thead>'
+        '<thead><tr><th>Peso</th><th>Posición</th><th class="num">Ret 3Y</th><th class="num">Ret 5Y</th></tr></thead>'
         f'<tbody>{hold_rows}</tbody></table></div></div>'
     )
 
@@ -2008,6 +2111,46 @@ table.ov{width:100%;border-collapse:collapse;font-size:13px}
 .changes td.dir.dn{color:var(--neg)}
 .changes td.dir.sw{color:var(--warn)}
 .changes td.dir.new{color:var(--sky)}
+.changes th.num,.changes td.num{text-align:right}
+.changes td.num.pos{color:var(--pos);font-weight:700}
+.changes td.num.neg{color:var(--neg);font-weight:700}
+.changes td.num.neu{color:var(--fg-subtle)}
+
+.perftab{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+.perftab th{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-subtle);text-align:right;padding:6px 10px;border-bottom:1px solid var(--border)}
+.perftab th:first-child{text-align:left}
+.perftab td{padding:7px 10px;border-bottom:1px solid var(--g2);text-align:right;font-variant-numeric:tabular-nums}
+.perftab td:first-child{text-align:left;color:var(--fg-muted)}
+.perftab td.pos{color:var(--pos);font-weight:700}
+.perftab td.neg{color:var(--neg);font-weight:700}
+.perftab td.s{font-weight:700;color:var(--navy)}
+.perftab td.s.pos{color:var(--pos)}
+.perftab td.s.neg{color:var(--neg)}
+
+.diag{padding-block:clamp(40px,6vw,72px);background:var(--card)}
+.diag-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:clamp(20px,3vw,42px)}
+.diag-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh1);padding:22px 24px;margin-bottom:14px}
+.diag-card .lbl{margin-bottom:14px}
+.findings-bar{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--g2);font-size:13px}
+.findings-bar:last-child{border-bottom:none}
+.findings-bar .fb-label{flex:1;color:var(--fg)}
+.findings-bar .fb-track{flex:1.2;height:6px;background:var(--g1);border-radius:3px;overflow:hidden}
+.findings-bar .fb-fill{display:block;height:100%;background:var(--warn);border-radius:3px}
+.findings-bar .fb-count{width:80px;text-align:right;font-weight:700;color:var(--navy);font-size:12.5px}
+.top-problems table{width:100%;border-collapse:collapse;font-size:12.5px}
+.top-problems th{background:var(--g2);color:var(--fg-muted);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:10px 12px;text-align:left}
+.top-problems td{padding:10px 12px;border-bottom:1px solid var(--g2)}
+.top-problems tr{cursor:pointer;transition:background .14s}
+.top-problems tbody tr:hover{background:var(--sky-100)}
+.top-problems .badcount{font-weight:800;color:var(--neg)}
+.client-dist table{width:100%;border-collapse:collapse;font-size:12.5px}
+.client-dist th{background:var(--g2);color:var(--fg-muted);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:10px 12px;text-align:left}
+.client-dist td{padding:8px 12px;border-bottom:1px solid var(--g2)}
+.client-dist td.num{text-align:right;font-variant-numeric:tabular-nums}
+.client-dist .ok{color:var(--pos);font-weight:700}
+.client-dist .wn{color:var(--warn);font-weight:700}
+.client-dist .cr{color:var(--neg);font-weight:700}
+@media(max-width:1000px){.diag-grid{grid-template-columns:1fr}}
 
 .closing{background:var(--grad-navy);color:#fff;margin-top:clamp(40px,6vw,80px)}
 .closing-in{padding-block:clamp(46px,7vw,92px)}
@@ -2142,6 +2285,156 @@ tt.addEventListener('click',()=>window.scrollTo({{top:0,behavior:'smooth'}}));
 """
 
 
+# ---------------------------------------------------------------------------
+# 7b. RADIOGRAFÍA — vista agregada de hallazgos
+# ---------------------------------------------------------------------------
+# Mapeo: substring que aparece dentro del <strong> del finding bad → categoría
+FINDING_CATEGORIES = [
+    ("Calidad crediticia agresiva",   "Calidad crediticia agresiva"),
+    ("Duration",                       "Duration larga"),
+    ("UW equities",                    "RV underweight vs perfil"),
+    ("Sin EM equities",                "EM equity ausente"),
+    ("Sin commodities",                "Gold/commodities ausente"),
+    ("Sobre-expuesto Europa",          "Europa concentrada"),
+    ("Cash elevado",                   "Cash exceso (>10%)"),
+    ("Concentración en una sub",       "Solapamiento de fondos"),
+]
+
+
+def categorize_finding(html_finding: str) -> str | None:
+    """Mapea un finding bad (string HTML) a una categoría conocida."""
+    for substr, label in FINDING_CATEGORIES:
+        if substr in html_finding:
+            return label
+    return None
+
+
+def render_diag(strategies: list[dict]) -> str:
+    """Render de la sección Radiografía con 3 bloques."""
+    if not strategies:
+        return ""
+
+    total_strats = len(strategies)
+
+    # --- Bloque A: hallazgos más comunes ---
+    cat_counter: dict[str, int] = defaultdict(int)
+    for s in strategies:
+        bads = s.get("ana", {}).get("bad", []) or []
+        # contar máx 1 por estrategia por categoría
+        seen = set()
+        for b in bads:
+            cat = categorize_finding(b)
+            if cat and cat not in seen:
+                cat_counter[cat] += 1
+                seen.add(cat)
+    cat_sorted = sorted(cat_counter.items(), key=lambda x: -x[1])
+    top_cats = cat_sorted[:8]
+    if top_cats:
+        max_count = top_cats[0][1]
+    else:
+        max_count = 1
+    bars_html = ""
+    for label, cnt in top_cats:
+        pct = (cnt / max_count) * 100 if max_count else 0
+        share = (cnt / total_strats) * 100 if total_strats else 0
+        bars_html += (
+            '<div class="findings-bar">'
+            f'<span class="fb-label">{html.escape(label)}</span>'
+            f'<span class="fb-track"><span class="fb-fill" style="width:{pct:.1f}%"></span></span>'
+            f'<span class="fb-count">{cnt} estr · {share:.0f}%</span>'
+            '</div>'
+        )
+    if not bars_html:
+        bars_html = '<p class="muted" style="font-size:13px">No se detectaron hallazgos clasificables.</p>'
+
+    # --- Bloque B: top 10 estrategias más problemáticas ---
+    ranked = []
+    for s in strategies:
+        bads = s.get("ana", {}).get("bad", []) or []
+        if not bads:
+            continue
+        ranked.append((s, len(bads)))
+    ranked.sort(key=lambda x: -x[1])
+    top_problems = ranked[:10]
+    problems_rows = ""
+    for s, n_bad in top_problems:
+        det_id_prefix = f"d-{safe_id(s['cliente'])}-"
+        # No tenemos el idx exacto acá; saltamos al anchor del cliente
+        anchor = f"#{safe_id(s['cliente'])}"
+        vd = s["ana"]["verdict"]
+        vd_cls = s["ana"]["vd_class"]
+        problems_rows += (
+            f'<tr onclick="location.hash=\'{anchor}\'">'
+            f'<td>{html.escape(s["cliente"])}</td>'
+            f'<td><strong>{html.escape(s["estrategia"])}</strong></td>'
+            f'<td>{html.escape(s["perfil"])}</td>'
+            f'<td class="badcount">{n_bad}</td>'
+            f'<td><span class="vd {vd_cls}">{html.escape(vd)}</span></td>'
+            '</tr>'
+        )
+    if not problems_rows:
+        problems_rows = '<tr><td colspan="5" class="muted" style="text-align:center">Sin estrategias con hallazgos críticos.</td></tr>'
+
+    # --- Bloque C: distribución por cliente ---
+    client_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"total": 0, "OK": 0, "Atención": 0, "Crítico": 0, "Pendiente": 0})
+    for s in strategies:
+        c = s["cliente"]
+        v = s["ana"]["verdict"]
+        client_stats[c]["total"] += 1
+        if v in client_stats[c]:
+            client_stats[c][v] += 1
+    # ordenar por # crítico descendente, luego atención, luego total
+    clients_sorted = sorted(
+        client_stats.items(),
+        key=lambda kv: (-kv[1]["Crítico"], -kv[1]["Atención"], -kv[1]["total"]),
+    )
+    dist_rows = ""
+    for cliente, st in clients_sorted:
+        dist_rows += (
+            f'<tr>'
+            f'<td><strong>{html.escape(cliente)}</strong></td>'
+            f'<td class="num">{st["total"]}</td>'
+            f'<td class="num ok">{st["OK"]}</td>'
+            f'<td class="num wn">{st["Atención"]}</td>'
+            f'<td class="num cr">{st["Crítico"]}</td>'
+            '</tr>'
+        )
+
+    return f"""
+<section class="diag" id="radiografia"><div class="container">
+  <div class="sec-head">
+    <span class="eyebrow">Radiografía</span>
+    <h2>Qué está <strong>roto</strong> en las estrategias</h2>
+    <p class="lede">Mirada agregada para priorizar revisiones: hallazgos más comunes, estrategias con más problemas y distribución por cliente.</p>
+  </div>
+  <div class="diag-grid">
+    <div>
+      <div class="diag-card">
+        <span class="lbl">Hallazgos más comunes</span>
+        {bars_html}
+      </div>
+      <div class="diag-card top-problems">
+        <span class="lbl">Top 10 más problemáticas</span>
+        <table>
+          <thead><tr><th>Cliente</th><th>Estrategia</th><th>Perfil</th><th># hallazgos</th><th>Veredicto</th></tr></thead>
+          <tbody>{problems_rows}</tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <div class="diag-card client-dist">
+        <span class="lbl">Distribución por cliente</span>
+        <table>
+          <thead><tr><th>Cliente</th><th class="num">Total</th><th class="num">OK</th><th class="num">Atención</th><th class="num">Crítico</th></tr></thead>
+          <tbody>{dist_rows}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div></section>
+"""
+
+
 def render_html(strategies: list[dict]) -> str:
     # Agrupar por cliente, orden fijo: LATAM primero, luego alfabético
     by_client: dict[str, list[dict]] = defaultdict(list)
@@ -2163,7 +2456,7 @@ def render_html(strategies: list[dict]) -> str:
     n_ok = sum(1 for s in strategies if s["ana"]["verdict"] == "OK")
     n_pd = sum(1 for s in strategies if s["ana"]["verdict"] == "Pendiente")
 
-    nav_links = '<a href="#panorama">House View</a><a href="#indice">Clientes</a>'
+    nav_links = '<a href="#panorama">House View</a><a href="#radiografia">Radiografía</a><a href="#indice">Clientes</a>'
     for cliente in list(ordered.keys())[:8]:
         nav_links += f'<a href="#{safe_id(cliente)}">{html.escape(cliente)}</a>'
 
@@ -2205,7 +2498,9 @@ def render_html(strategies: list[dict]) -> str:
     for i, (cliente, strats) in enumerate(ordered.items()):
         sections += render_section(cliente, strats, i)
 
-    return HEAD_CSS + hero + PANORAMA_HTML + idx_section + sections + FOOTER_HTML
+    diag_section = render_diag(strategies)
+
+    return HEAD_CSS + hero + PANORAMA_HTML + diag_section + idx_section + sections + FOOTER_HTML
 
 
 # ---------------------------------------------------------------------------
