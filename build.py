@@ -395,27 +395,31 @@ def parse_pdf_holdings(pdf_path: str) -> tuple[list[tuple], dict]:
 def _parse_holdings_text(txt: str) -> list[tuple]:
     """Aplica LINE_RE línea por línea sobre el texto de la página de composición.
     Además extrae los floats trailing (Ret_1m, Ret_YTD, Ret_1y, Ret_3y, Ret_5y, ...)
-    para devolver también Ret_3y y Ret_5y."""
+    para devolver también Ret_3y y Ret_5y.
+
+    IMPORTANTE: corta el parsing al encontrar el primer "TOTAL" (100.00 TOTAL ...).
+    Algunos PPTs (ITAU) tienen DOS portafolios en la misma página: el principal
+    y uno adicional de fondos de liquidez. Sin este corte, se sumaba todo y los
+    pesos quedaban inflados (RF >100%).
+    """
     out: list[tuple] = []
     nums_re = re.compile(r'-?\d+\.\d+')
-    # Algunos nombres ocupan dos líneas (el filename del fondo) — pdfplumber suele
-    # poner todo en una sola línea, pero a veces parte el "Nombre del fondo".
-    # Estrategia: regex directo por línea, ya filtra por '-' o dígito tras nombre.
+    # Detectar fin de portafolio: línea con "TOTAL" (mayúsculas, opcional 100.00 antes)
+    total_re = re.compile(r'^\s*(?:\d+\.\d+\s+)?TOTAL\b', re.IGNORECASE)
+
     for line in txt.split("\n"):
+        # Corte: una vez que vemos "TOTAL", paramos. El resto es de otro portafolio.
+        if total_re.match(line):
+            break
         m = LINE_RE.match(line)
         if not m:
             continue
         peso = float(m.group(1))
         isin = m.group(2)
         nombre = m.group(3).strip()
-        # Trailing floats: tomamos todos los floats de la línea, descartamos el
-        # primero (peso) y nos quedamos con los métricos. Índices 0..4 son
-        # Ret_1m, Ret_YTD, Ret_1y, Ret_3y, Ret_5y.
         all_nums = nums_re.findall(line)
         ret_3y = None
         ret_5y = None
-        # Removemos la primera ocurrencia (peso) — todas las demás son métricas
-        # (los Ret pueden ser negativos, con punto decimal).
         metrics = all_nums[1:] if all_nums else []
         if len(metrics) >= 5:
             try:
