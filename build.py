@@ -778,8 +778,8 @@ SUGGESTIONS = {
 }
 
 
-def _short_name(name: str, n: int = 38) -> str:
-    """Trim de nombre de fondo para tablas."""
+def _short_name(name: str, n: int = 70) -> str:
+    """Trim de nombre de fondo para tablas (default 70 chars; el CSS wrap se encarga)."""
     if not name:
         return "—"
     name = re.sub(r"\s+", " ", str(name)).strip()
@@ -1671,7 +1671,7 @@ table.ov{width:100%;border-collapse:collapse;font-size:13px}
 .chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--navy);background:var(--g2);border:1px solid var(--border);border-radius:6px;padding:3px 9px}
 .chip-ag{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-subtle)}
 .sheet-h-r{display:flex;flex-direction:column;align-items:flex-end;gap:9px;flex-shrink:0;min-width:172px}
-.sheet-body{display:grid;grid-template-columns:1.06fr .94fr;gap:clamp(20px,3.2vw,42px);padding:20px 0 0}
+.sheet-body{display:grid;grid-template-columns:1.4fr 1fr;gap:clamp(20px,3.2vw,42px);padding:20px 0 0}
 .sheet-thesis .block{margin-bottom:18px}
 .sheet-thesis .lbl{margin-bottom:8px}
 .sheet-thesis p{font-size:13.5px;line-height:1.62;color:var(--fg);max-width:64ch}
@@ -1708,9 +1708,11 @@ table.ov{width:100%;border-collapse:collapse;font-size:13px}
 .changes{margin-top:14px;background:#fbfcfe;border:1px solid var(--border);border-radius:var(--r-s);overflow:hidden}
 .changes table{width:100%;border-collapse:collapse;font-size:12.5px}
 .changes th{background:var(--g2);color:var(--fg-muted);font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:9px 12px;text-align:left}
-.changes td{padding:9px 12px;border-top:1px solid var(--g2);vertical-align:top}
-.changes td.act{font-weight:700;color:var(--navy);white-space:nowrap}
-.changes td.dir{font-weight:800;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
+.changes td{padding:9px 12px;border-top:1px solid var(--g2);vertical-align:top;line-height:1.45}
+.changes td.act{font-weight:700;color:var(--navy);min-width:180px}
+.changes td.dir{font-weight:800;font-size:11px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;width:1%}
+.changes td.num{white-space:nowrap;width:1%;text-align:right}
+.changes td:last-child{min-width:140px}
 .changes td.dir.up{color:var(--pos)}
 .changes td.dir.dn{color:var(--neg)}
 .changes td.dir.sw{color:var(--warn)}
