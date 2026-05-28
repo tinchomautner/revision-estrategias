@@ -3,3 +3,4 @@ __pycache__/
 .venv/
 # Datos internos: catálogos de fondos/ETFs y house view interno — solo local
 data/
+assets/

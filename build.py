@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import html
+import base64
 import logging
 import unicodedata
 from pathlib import Path
@@ -21,6 +22,16 @@ from collections import defaultdict
 
 import pandas as pd
 import pdfplumber
+
+# ---------------------------------------------------------------------------
+# LOGO
+# ---------------------------------------------------------------------------
+def _logo_b64():
+    p = Path(__file__).parent / "assets" / "logo-latam-color.png"
+    return base64.b64encode(p.read_bytes()).decode()
+
+LOGO_B64 = _logo_b64()
+LOGO_DATA = f"data:image/png;base64,{LOGO_B64}"
 
 # ---------------------------------------------------------------------------
 # CONFIG
@@ -383,6 +394,117 @@ def _parse_holdings_text(txt: str) -> list[tuple[str, float, str]]:
         nombre = m.group(3).strip()
         out.append((isin, peso, nombre))
     return out
+
+
+# ---------------------------------------------------------------------------
+# 3b. PARSEAR PDFs — métricas de performance (página 7 típicamente)
+# ---------------------------------------------------------------------------
+_FLOAT_RE = re.compile(r'-?\d+\.\d+')
+_BM_TOKENS = ("benchmark", "60-40", "60/40")
+
+
+def _is_benchmark_line(line: str) -> bool:
+    low = line.lower()
+    if any(t in low for t in _BM_TOKENS):
+        return True
+    # "BM" como token aislado
+    if re.search(r'\bBM\b', line):
+        return True
+    return False
+
+
+def _extract_perf_from_text(txt: str) -> dict:
+    """Intenta extraer perf+riesgo de un texto. Si no hay líneas con 7 y 10
+    floats no-BM, devuelve None (señal para seguir buscando)."""
+    perf = {"ret_5y": None, "ret_3y": None, "ret_1y": None}
+    risk = {"vol_5y": None, "sharpe_5y": None,
+            "dd_5y": None, "dd_3y": None,
+            "up_5y": None, "dn_5y": None}
+
+    for line in txt.split("\n"):
+        if _is_benchmark_line(line):
+            continue
+        nums = _FLOAT_RE.findall(line)
+        if len(nums) == 7 and perf["ret_5y"] is None:
+            try:
+                fnums = [float(x) for x in nums]
+                perf["ret_1y"] = fnums[4]
+                perf["ret_3y"] = fnums[5]
+                perf["ret_5y"] = fnums[6]
+            except ValueError:
+                pass
+        elif len(nums) == 10 and risk["vol_5y"] is None:
+            try:
+                fnums = [float(x) for x in nums]
+                risk["vol_5y"] = fnums[1]
+                risk["sharpe_5y"] = fnums[3]
+                risk["dd_3y"] = fnums[4]
+                risk["dd_5y"] = fnums[5]
+                risk["up_5y"] = fnums[7]
+                risk["dn_5y"] = fnums[9]
+            except ValueError:
+                pass
+        elif len(nums) == 6 and risk["vol_5y"] is None and re.search(r'-\s+-\s+-\s+-\s*$', line):
+            # Caso ITAU S-BM / Niveton: la tabla tiene Vol3 Vol5 Sharpe3 Sharpe5 DD3 DD5
+            # y las columnas Up/Dn vienen con "- - - -" (sin tracking suficiente).
+            try:
+                fnums = [float(x) for x in nums]
+                risk["vol_5y"] = fnums[1]
+                risk["sharpe_5y"] = fnums[3]
+                risk["dd_3y"] = fnums[4]
+                risk["dd_5y"] = fnums[5]
+                # up/dn quedan en None
+            except ValueError:
+                pass
+        if perf["ret_5y"] is not None and risk["vol_5y"] is not None:
+            break
+    return {**perf, **risk}
+
+
+def parse_performance_metrics(pdf_path: str) -> dict:
+    """Extrae métricas de performance y riesgo de la página 7 del PDF (idx=6).
+    Si no encuentra ahí, busca en otras páginas con header de performance/metrics.
+    Devuelve dict con keys: ret_5y, ret_3y, ret_1y, vol_5y, sharpe_5y,
+    dd_5y, dd_3y, up_5y, dn_5y (cualquiera puede ser None).
+    """
+    empty = {
+        "ret_5y": None, "ret_3y": None, "ret_1y": None,
+        "vol_5y": None, "sharpe_5y": None,
+        "dd_5y": None, "dd_3y": None,
+        "up_5y": None, "dn_5y": None,
+    }
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            n = len(pdf.pages)
+            # 1) Primer intento: página 7 (idx 6) directo
+            if n > 6:
+                res = _extract_perf_from_text(pdf.pages[6].extract_text() or "")
+                if res["ret_5y"] is not None or res["vol_5y"] is not None:
+                    return res
+            # 2) Buscar páginas que contengan el header de metrics
+            best = None
+            for pi in range(n):
+                t = pdf.pages[pi].extract_text() or ""
+                up = t.upper()
+                is_metric_page = (
+                    ("RENDIMIENTO Y M" in up)  # ES
+                    or ("PERFORMANCE AND FINANCIAL" in up)  # EN
+                    or ("VOLATILIDAD" in up and "SHARPE" in up)
+                    or ("VOLATILITY" in up and "SHARPE" in up)
+                )
+                if not is_metric_page:
+                    continue
+                res = _extract_perf_from_text(t)
+                if res["ret_5y"] is not None and res["vol_5y"] is not None:
+                    return res
+                # Guardar el mejor parcial por si nada matchea completo
+                if best is None or sum(v is not None for v in res.values()) > sum(v is not None for v in best.values()):
+                    best = res
+            if best is not None:
+                return best
+    except Exception as e:
+        log.warning("Error leyendo perf de %s: %s", pdf_path, e)
+    return empty
 
 
 # ---------------------------------------------------------------------------
@@ -968,6 +1090,7 @@ def process_all(catalog: dict) -> list[dict]:
     for s in strategies:
         log.info("Procesando %s | %s", s["cliente"], s["estrategia"])
         holdings, _meta = parse_pdf_holdings(s["path"])
+        perf = parse_performance_metrics(s["path"])
         if not holdings:
             log.warning("  Sin holdings detectables en %s", s["filename"])
             agg = aggregate([], catalog)
@@ -986,6 +1109,7 @@ def process_all(catalog: dict) -> list[dict]:
         s["holdings"] = holdings
         s["agg"] = agg
         s["ana"] = ana
+        s["perf"] = perf
         s["recommendations"] = recs
         out.append(s)
     return out
@@ -1059,6 +1183,19 @@ def render_overview_row(s: dict, idx: int) -> str:
     ytw = ana.get("ytw")
     dur = ana.get("dur")
 
+    perf = s.get("perf") or {}
+    ret_5y = perf.get("ret_5y")
+    dd_5y = perf.get("dd_5y")
+
+    def _signed_cell(v, label, digits=2, suffix="%"):
+        if v is None:
+            return f'<td class="num neu" data-l="{label}">—</td>'
+        cls = "pos" if v >= 0 else "neg"
+        return f'<td class="num {cls}" data-l="{label}">{fmt(v, digits, suffix)}</td>'
+
+    ret_cell = _signed_cell(ret_5y, "Ret5Y")
+    dd_cell = _signed_cell(dd_5y, "DD5Y")
+
     sub_html = ""
     if s.get("sub"):
         sub_html = f'<span class="ov-sub">{html.escape(s["sub"])}</span>'
@@ -1074,8 +1211,8 @@ def render_overview_row(s: dict, idx: int) -> str:
             <td class="num" data-l="RV">{fmt(rv)}</td>
             <td class="num" data-l="YTW">{fmt(ytw, 2)}</td>
             <td class="num" data-l="Dur">{fmt(dur, 2)}</td>
-            <td class="num neu" data-l="Ret5Y">—</td>
-            <td class="num neu" data-l="DD5Y">—</td>
+            {ret_cell}
+            {dd_cell}
             <td class="ctr"><span class="vd {vd_cls}">{html.escape(vd)}</span></td>
           </tr>"""
     if not has_data:
@@ -1208,16 +1345,26 @@ def render_detail(s: dict, det_id: str) -> str:
         '</dl></div>'
     )
 
-    # Costos / extras
-    extras_block = (
-        '<div class="data-grp full"><span class="grp-t">Costos y exposición</span><dl>'
-        f'<div class="dl"><dt>TER ponderado</dt><dd class="{"neg" if (ana.get("ter") or 0)>1.5 else "strong"}">{fmt_raw(ana.get("ter"),2,"%")}</dd></div>'
-        f'<div class="dl"><dt>Commodities</dt><dd>{fmt_raw(ana.get("com"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Cash</dt><dd>{fmt_raw(ana.get("cash"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>EM equity</dt><dd>{fmt_raw(ana.get("eq_em"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Cobertura del catálogo</dt><dd>{fmt_raw(agg.get("_weight_known"),1,"%")} de {fmt_raw(agg.get("_weight_total"),1,"%")}</dd></div>'
-        f'<div class="dl"><dt>Holdings detectados</dt><dd>{len(agg.get("_holdings", []))}</dd></div>'
-        '</dl></div>'
+    # Performance & riesgo vs BM (datos reales del PDF, página 7)
+    perf = s.get("perf") or {}
+    def _perf_dd(label, v, digits=2, suffix="%"):
+        if v is None:
+            return f'<div class="dl"><dt>{label}</dt><dd>—</dd></div>'
+        cls = "pos" if v >= 0 else "neg"
+        return f'<div class="dl"><dt>{label}</dt><dd class="{cls}">{fmt_raw(v, digits, suffix)}</dd></div>'
+
+    perf_block = (
+        '<div class="data-grp full"><span class="grp-t">Performance & riesgo vs BM</span><dl>'
+        + _perf_dd("Ret 1Y", perf.get("ret_1y"))
+        + _perf_dd("Ret 3Y", perf.get("ret_3y"))
+        + _perf_dd("Ret 5Y", perf.get("ret_5y"))
+        + f'<div class="dl"><dt>Vol 5Y</dt><dd>{fmt_raw(perf.get("vol_5y"),2,"%")}</dd></div>'
+        + _perf_dd("Sharpe 5Y", perf.get("sharpe_5y"))
+        + _perf_dd("Max DD 3Y", perf.get("dd_3y"))
+        + _perf_dd("Max DD 5Y", perf.get("dd_5y"))
+        + f'<div class="dl"><dt>Up Capture 5Y</dt><dd>{fmt_raw(perf.get("up_5y"),2,"%")}</dd></div>'
+        + f'<div class="dl"><dt>Down Capture 5Y</dt><dd>{fmt_raw(perf.get("dn_5y"),2,"%")}</dd></div>'
+        + '</dl></div>'
     )
 
     holdings_block = (
@@ -1276,7 +1423,7 @@ def render_detail(s: dict, det_id: str) -> str:
                   </div>
                   {rf_block}
                   {rv_block}
-                  {extras_block}
+                  {perf_block}
                   {holdings_block}
                 </div>
               </div>
@@ -1636,9 +1783,9 @@ PANORAMA_HTML = r"""
 </div></section>
 """
 
-FOOTER_HTML = r"""
+FOOTER_HTML = rf"""
 <footer class="closing"><div class="container closing-in">
-  <div class="closing-brand">LATAM <span>ConsultUs</span></div>
+  <img class="closing-logo" src="{LOGO_DATA}" alt="LATAM ConsultUs" style="height:36px;width:auto;display:block;margin-bottom:clamp(26px,5vw,50px);filter:brightness(0) invert(1)">
   <div class="closing-headline">Una revisión<br><strong>vale lo que cuesta cambiar.</strong></div>
   <div class="closing-rule"></div>
   <p style="color:#cbd9e8;font-weight:300;max-width:60ch;font-size:15.5px;line-height:1.62">
@@ -1652,20 +1799,20 @@ FOOTER_HTML = r"""
 <button class="totop" id="totop" aria-label="Volver arriba">↑</button>
 
 <script>
-document.querySelectorAll('.ov-row[data-target]').forEach(row=>{
-  row.addEventListener('click',()=>{
+document.querySelectorAll('.ov-row[data-target]').forEach(row=>{{
+  row.addEventListener('click',()=>{{
     const id=row.getAttribute('data-target');
     const det=document.getElementById(id);
     const open=row.classList.toggle('open');
-    if(det){det.classList.toggle('open',open)}
-  });
-});
+    if(det){{det.classList.toggle('open',open)}}
+  }});
+}});
 
 const tt=document.getElementById('totop');
-window.addEventListener('scroll',()=>{
+window.addEventListener('scroll',()=>{{
   tt.classList.toggle('show',window.scrollY>600);
-});
-tt.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+}});
+tt.addEventListener('click',()=>window.scrollTo({{top:0,behavior:'smooth'}}));
 </script>
 
 </body>
@@ -1700,14 +1847,14 @@ def render_html(strategies: list[dict]) -> str:
 
     hero = f"""
 <nav class="topnav"><div class="container nav-in">
-  <a class="brand" href="#top">LATAM <span>ConsultUs</span></a>
+  <a class="brand" href="#top"><img src="{LOGO_DATA}" alt="LATAM ConsultUs" style="height:30px;width:auto;display:block"></a>
   <div class="nav-links">{nav_links}</div>
   <span class="nav-date">Abril 2026</span>
 </div></nav>
 
 <header class="hero"><div class="hero-bg"></div>
 <div class="container hero-in">
-  <div class="hero-brand">LATAM <span>ConsultUs</span></div>
+  <img class="hero-logo" src="{LOGO_DATA}" alt="LATAM ConsultUs" style="height:42px;width:auto;display:block;margin-bottom:clamp(30px,6vw,62px);filter:brightness(0) invert(1)">
   <h1>Revisión de <strong>Estrategias</strong></h1>
   <p class="hero-sub">Auditoría automatizada de las {n_estr} estrategias de inversión de Abril 2026 frente al house view interno: alineación cuantitativa, hallazgos y prioridad de revisión. Una ficha por estrategia, agrupadas por cliente, con composición ponderada por holding.</p>
   <div class="hero-meta">
