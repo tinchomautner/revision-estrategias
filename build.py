@@ -62,6 +62,10 @@ EXCLUDE_PATTERNS = [
     re.compile(r"OVERDRAWN", re.I),
 ]
 
+# Para ITAU: las versiones SIN BENCHMARK / S-BM son redundantes; solo mantener CON BM
+ITAU_EXCLUDE_PATH_RE = re.compile(r"SIN\s*BM|SIN\s*BENCHMARK", re.I)
+ITAU_EXCLUDE_FNAME_RE = re.compile(r"\bS[-\s]?BM\b", re.I)
+
 # Línea de holding: peso ISIN nombre... <métrica numérica o '-' >
 LINE_RE = re.compile(
     r"^\s*(\d{1,3}\.\d{1,2})\s+([A-Z]{2}[A-Z0-9]{9}\d)\s+(.+?)\s+[-\d]"
@@ -265,6 +269,10 @@ def clean_strategy_name(fname: str, cliente: str) -> str:
     s = re.sub(r"\s+PPT$", "", s, flags=re.I)
     s = re.sub(r"\s+ppt$", "", s)
     s = re.sub(r"\s+ppt\s*$", "", s, flags=re.I)
+    # ITAU: sacar el sufijo/prefijo de benchmark del nombre visible
+    s = re.sub(r"\bC[-\s]?BM\b", "", s, flags=re.I)
+    s = re.sub(r"\bCON\s+BENCHMARK\b", "", s, flags=re.I)
+    s = re.sub(r"\bCON\s+BM\b", "", s, flags=re.I)
     s = re.sub(r"\s+", " ", s).strip()
     # algunos clientes prefijan con su nombre, lo dejamos
     return s or cliente
@@ -291,6 +299,11 @@ def discover_strategies() -> list[dict]:
             rel = full.relative_to(PDF_ROOT)
             parts = rel.parts
             cliente_raw = parts[0]
+            # Filtro ITAU: las versiones SIN BENCHMARK / S-BM son duplicados
+            # redundantes (misma estrategia sin métricas vs benchmark).
+            if "ITAU" in cliente_raw.upper() or "ITAÚ" in cliente_raw.upper():
+                if ITAU_EXCLUDE_PATH_RE.search(str(rel)) or ITAU_EXCLUDE_FNAME_RE.search(f):
+                    continue
             # limpiar nombre de cliente
             cliente = cliente_raw
             cliente = re.sub(r"\s*-\s*MaximUs\s*$", "", cliente, flags=re.I)
@@ -666,44 +679,44 @@ def analyze(agg: dict, perfil: str) -> dict:
     # R1 calidad crediticia
     if sub_ig_rf > (100 - th["ig_min"]) and rf > 5:
         bad.append(
-            f"<strong>Calidad crediticia agresiva</strong> · {sub_ig_rf:.1f}% sub-IG en RF "
-            f"vs límite {100-th['ig_min']:.0f}% para perfil {perfil}.")
+            f"<strong>Calidad crediticia agresiva</strong> · {sub_ig_rf:.1f}% sub-IG en RF — "
+            f"reducir concentración sub-investment grade para perfil {perfil}.")
     # R2 duration larga
     if dur > th["dur_max"] and rf > 5:
         bad.append(
-            f"<strong>Duration {dur:.2f}a por encima del techo</strong> ({th['dur_max']}a) — riesgo de term premium.")
+            f"<strong>Duration {dur:.2f}a por encima del techo</strong> ({th['dur_max']}a) — "
+            f"house view es UW duration larga US por riesgo de tasas.")
     # R3 RV alineada con OW
     if perfil != "Conservador" and perfil != "Otro" and rv < th["rv_min"]:
         bad.append(
-            f"<strong>UW equities</strong> ({rv:.1f}% RV) vs piso {th['rv_min']}% del perfil; house view marca OW global equities.")
+            f"<strong>UW equities</strong> ({rv:.1f}% RV) vs piso {th['rv_min']}% del perfil — "
+            f"house view OW global equities.")
     # R4 EM equity
     if perfil not in ("Conservador", "Otro") and eq_em < 3 and rv > 10:
-        bad.append("<strong>Sin EM equities</strong> — view marca OW EM selectivo (Norte Asia + LatAm).")
+        bad.append("<strong>Sin EM equities</strong> — house view OW EM.")
     # R5 commodities/oro
     if com < 1 and rv > 10:
-        bad.append("<strong>Sin commodities/oro</strong> — falta hedge inflacionario que el view pide OW.")
-    # R6 IA infraestructura
-    if rv > 15 and (tech + ind) < 25:
-        bad.append(
-            f"<strong>Bajo IA-infraestructura</strong> · tech+industrials {tech+ind:.1f}% del RV "
-            f"vs target ≥25% (alto convicción del view).")
-    # R7 TER
-    if ter is not None and ter > 1.5:
-        bad.append(f"<strong>TER ponderado alto</strong> · {ter:.2f}% > 1.5%.")
+        bad.append("<strong>Sin commodities/oro</strong> — falta hedge inflacionario (OW en house view).")
+    # R6/R7 removidas — IA-infra es posición táctica, TER no es criterio de revisión
     # R8 Europa pura
     if eq_europe > 15:
         bad.append(
-            f"<strong>Sobre-expuesto Europa</strong> · {eq_europe:.1f}% RV en Europa vs view Neutral.")
+            f"<strong>Sobre-expuesto Europa</strong> · {eq_europe:.1f}% RV en Europa — "
+            f"house view Neutral, redirigir a EM o Global.")
     # R9 cash exceso
     if cash > 10:
-        bad.append(f"<strong>Cash elevado</strong> · {cash:.1f}% — útil táctico, malo estructural.")
+        bad.append(
+            f"<strong>Cash elevado</strong> · {cash:.1f}% — "
+            f"house view UW cash, preferir carry en RF corta.")
     # R10 solapamiento por sub-categoría
     sub_acc = agg.get("_sub_acc", {})
     overlaps = [(k, v) for k, v in sub_acc.items() if v > 25 and k not in ("", "?")]
     overlaps.sort(key=lambda x: -x[1])
     if overlaps:
         k, v = overlaps[0]
-        bad.append(f"<strong>Concentración en una sub-categoría</strong> · {k} suma {v:.1f}%.")
+        bad.append(
+            f"<strong>Concentración en una sub-categoría</strong> · {k} suma {v:.1f}% — "
+            f"consolidar fondos con misma sub-categoría para reducir solapamiento.")
 
     # GOOD findings
     if ytw > 5 and rf > 5:
@@ -753,6 +766,16 @@ EM_BOND_CATEGORIES = {"EM Bonds", "EM BONDS", "Asian Bonds"}
 FLEX_FI_CATEGORIES = {"Flexible FI"}
 EUROPE_EQ_CATEGORIES = {"Europe Equity"}
 CORE_FI_CATEGORIES = {"Core Fixed Income", "Short Duration"}
+
+# Fondos concretos sugeridos por tipo de "Sumar"
+# Verificados contra data/fondos.xlsx y data/etfs.xlsx
+SUGGESTIONS = {
+    'oro':         'iShares Gold Trust (IAU) o SPDR Gold Shares (GLD)',
+    'commodities': 'Invesco Optimum Yield Diversified Commodity (PDBC) o iShares Diversified Commodity Swap (ICOM LN)',
+    'em_equity':   'Vontobel Sustainable EM Leaders B1 (LU1882611756) o iShares MSCI Emerging Markets (EEM)',
+    'tips':        'iShares TIPS Bond ETF (TIP) o AXA Global Inflation Short Duration (LU1353950568)',
+    'ig_short':    'JPM US Short Duration Bond A (LU0562247428) o iShares 0-5 Year TIPS (STIP)',
+}
 
 
 def _short_name(name: str, n: int = 38) -> str:
@@ -916,19 +939,28 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
         agg_funds = find_funds_subig(holdings_detail, catalog, min_subig=40.0)
         for f in agg_funds[:3]:
             peso = f["peso"]
-            target = round(peso / 2, 1)
-            add(
-                "dn", "Bajar",
-                _short_name(f["nombre"]),
-                f"{peso:.1f}%", f"{target:.1f}%",
-                "HY/sub-IG selectivo en view; underwriting exigente",
-            )
+            # Cambio mínimo de 5pp absolutos; si está al 5% o menos -> Sacar
+            if peso <= 5.0:
+                add(
+                    "dn", "Sacar",
+                    _short_name(f["nombre"]),
+                    f"{peso:.1f}%", "0%",
+                    f"Reducir concentración sub-investment grade para perfil {perfil}",
+                )
+            else:
+                target = max(round(peso - 5.0), 0)
+                add(
+                    "dn", "Bajar",
+                    _short_name(f["nombre"]),
+                    f"{peso:.1f}%", f"{target}%",
+                    f"Reducir concentración sub-investment grade para perfil {perfil}",
+                )
         # Sumar IG short duration
         add(
             "new", "Sumar",
-            "TIPS / IG Short Duration",
-            "0%", "3-5%",
-            "Reemplazar carry sub-IG con calidad y duration corta",
+            SUGGESTIONS['ig_short'],
+            "0%", "5%",
+            "Mejorar calidad crediticia de la cartera con investment grade short duration",
         )
 
     # ---- R2 Duration larga ----------------------------------------------
@@ -937,20 +969,22 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
                                               min_dur=th["dur_max"])
         for f in long_funds[:2]:
             peso = f["peso"]
-            target = max(round(peso / 2, 1), 0.0)
+            if peso < 5.0:
+                # Cambio sub-5pp no vale la pena rebalancear; saltar
+                continue
             add(
                 "sw", "Rotar",
                 _short_name(f["nombre"]),
                 f"{peso:.1f}% (dur {f['dur']:.1f}a)",
                 "Corporate short-duration",
-                "UW duration larga US — term premium + déficits",
+                "Reducir duration: house view es UW duration larga US por riesgo de tasas",
             )
         if not long_funds:
             add(
                 "dn", "Bajar",
                 "Duration RF agregada",
                 f"{dur:.1f}a", f"≤{th['dur_max']}a",
-                "UW duration larga US",
+                "Reducir duration: house view es UW duration larga US por riesgo de tasas",
             )
 
     # ---- R3 UW equities vs perfil (vs view OW global equities) ----------
@@ -961,74 +995,44 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
         # umbral suave: 80% del midpoint (i.e. claramente debajo)
         soft_target = midpoint * 0.85
         if rv < max(th["rv_min"], soft_target):
-            target_lo = max(int(round(midpoint - 5)), th["rv_min"])
-            target_hi = min(target_lo + 4, th["rv_max"])
-            add(
-                "up", "Subir",
-                "Renta Variable global total",
-                f"{rv:.1f}%", f"{target_lo}-{target_hi}%",
-                "House view marca OW global equities",
-            )
+            target = max(int(round(midpoint)), th["rv_min"])
+            # Solo recomendar si el ajuste es de al menos 5 puntos
+            if target - rv >= 5.0:
+                add(
+                    "up", "Subir",
+                    "Renta Variable global total",
+                    f"{rv:.1f}%", f"{target}%",
+                    "Aumentar exposición a renta variable: house view OW global equities",
+                )
 
     # ---- R4 EM equity ausente -------------------------------------------
     if perfil not in ("Conservador", "Otro") and eq_em_port < 3 and rv > 10:
         add(
             "new", "Sumar",
-            "EM Equity selectivo (Norte Asia + LatAm)",
-            f"{eq_em_port:.1f}%", "3-5%",
-            "OW EM selectivo: semis/IA Norte Asia + commodities LatAm",
+            SUGGESTIONS['em_equity'],
+            f"{eq_em_port:.1f}%", "5%",
+            "Sumar exposición a mercados emergentes: house view OW EM",
         )
 
     # ---- R5 Commodities / gold / energy ---------------------------------
     if precious_port < 1 and rv > 10:
         add(
             "new", "Sumar",
-            "Oro / ETF SPDR Gold",
-            f"{precious_port:.1f}%", "3-5%",
-            "OW oro · hedge geopolítico e inflacionario",
+            SUGGESTIONS['oro'],
+            f"{precious_port:.1f}%", "5%",
+            "Sumar oro como hedge inflacionario y geopolítico (OW en house view)",
         )
     if energy_port < 1 and rv > 15:
         add(
             "new", "Sumar",
-            "Commodities broad / energía",
-            f"{energy_port:.1f}%", "3%",
-            "OW energy + cobre · beneficiarios del ciclo IA-infra",
+            SUGGESTIONS['commodities'],
+            f"{energy_port:.1f}%", "5%",
+            "Sumar commodities como cobertura inflacionaria (OW en house view)",
         )
 
-    # ---- R6 IA-infraestructura ------------------------------------------
-    # 6a — tech+industrials del RV bajos
-    if rv > 15 and (tech + ind) < 25:
-        add(
-            "new", "Sumar",
-            "IA-infraestructura física (cobre, grid, REITs, semis)",
-            f"{tech+ind:.1f}% del RV", "≥25% del RV (+5% nuevo)",
-            "Alto convicción del view · no solo mega-cap tech",
-        )
-    else:
-        # 6b — sin exposición temática IA-infra explícita (sector/thematic)
-        has_thematic = any(
-            (h.get("categoria") or "") == "Sector/Thematic"
-            for h in holdings_detail
-        )
-        if rv > 25 and not has_thematic and perfil not in ("Conservador",):
-            add(
-                "new", "Sumar",
-                "IA-infraestructura física (cobre, grid, REITs, semis)",
-                "0%", "5%",
-                "Alto convicción del view · faltan thematics IA-infra",
-            )
-
-    # ---- R7 TER alto ----------------------------------------------------
-    if ter is not None and ter > 1.5:
-        top_costly = find_high_ter_funds(holdings_detail, catalog, n=2, min_ter=1.4)
-        for f in top_costly:
-            add(
-                "sw", "Rotar",
-                _short_name(f["nombre"]),
-                f"{f['peso']:.1f}% (TER {f['ter']:.2f}%)",
-                "ETF/clase institucional equivalente",
-                "TER ponderado alto · reducir costo agregado",
-            )
+    # ---- R6/R7 removidas -----------------------------------------------
+    # R6 (IA-infraestructura): posición táctica/temática, no ajuste estructural.
+    # R7 (TER alto): el costo no es criterio de revisión de cartera.
 
     # ---- R8 Europa concentrada ------------------------------------------
     if eq_europe_port > 15:
@@ -1038,28 +1042,38 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
             europe_funds.sort(key=lambda x: -x["peso"])
             f = europe_funds[0]
             peso = f["peso"]
-            target = max(round(peso * 0.6, 1), 0.0)
-            add(
-                "dn", "Bajar",
-                _short_name(f["nombre"]),
-                f"{peso:.1f}%", f"{target:.1f}%",
-                f"Europa pura {eq_europe_port:.1f}% > 15% · view Neutral; redirigir a EM/Global",
-            )
+            if peso <= 5.0:
+                add(
+                    "dn", "Sacar",
+                    _short_name(f["nombre"]),
+                    f"{peso:.1f}%", "0%",
+                    "Reducir concentración Europa: house view Neutral, redirigir a EM o Global",
+                )
+            else:
+                target = max(round(peso - 5.0), 0)
+                add(
+                    "dn", "Bajar",
+                    _short_name(f["nombre"]),
+                    f"{peso:.1f}%", f"{target}%",
+                    "Reducir concentración Europa: house view Neutral, redirigir a EM o Global",
+                )
         else:
             add(
                 "dn", "Bajar",
                 "Exposición Europa equities",
                 f"{eq_europe_port:.1f}%", "<15%",
-                "View Neutral Europa · redirigir delta a EM/Global",
+                "Reducir concentración Europa: house view Neutral, redirigir a EM o Global",
             )
 
     # ---- R9 Cash exceso -------------------------------------------------
     if cash > 10:
+        # cash > 10, target <5 -> siempre cambio de >5pp; ok
+        target = 5
         add(
             "dn", "Bajar",
             "Cash",
-            f"{cash:.1f}%", "<5%",
-            "Útil táctico, malo estructural · redirigir a YTW corto",
+            f"{cash:.1f}%", f"{target}%",
+            "Reducir cash estructural: house view UW cash, preferir carry en RF corta",
         )
 
     # ---- R10 Solapamiento por sub-categoría -----------------------------
@@ -1074,7 +1088,7 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
             f"Consolidar {pos_label}",
             f"{ov['total']:.1f}% en «{ov['sub']}»",
             "Un único vehículo",
-            f"Solapamiento sub-categoría · reducir redundancia",
+            "Consolidar fondos con misma sub-categoría para reducir solapamiento",
         )
 
     return recs
