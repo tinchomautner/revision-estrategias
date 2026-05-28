@@ -767,15 +767,50 @@ FLEX_FI_CATEGORIES = {"Flexible FI"}
 EUROPE_EQ_CATEGORIES = {"Europe Equity"}
 CORE_FI_CATEGORIES = {"Core Fixed Income", "Short Duration"}
 
-# Fondos concretos sugeridos por tipo de "Sumar"
-# Verificados contra data/fondos.xlsx y data/etfs.xlsx
-SUGGESTIONS = {
-    'oro':         'iShares Gold Trust (IAU) o SPDR Gold Shares (GLD)',
-    'commodities': 'Invesco Optimum Yield Diversified Commodity (PDBC) o iShares Diversified Commodity Swap (ICOM LN)',
-    'em_equity':   'Vontobel Sustainable EM Leaders B1 (LU1882611756) o iShares MSCI Emerging Markets (EEM)',
-    'tips':        'iShares TIPS Bond ETF (TIP) o AXA Global Inflation Short Duration (LU1353950568)',
-    'ig_short':    'JPM US Short Duration Bond A (LU0562247428) o iShares 0-5 Year TIPS (STIP)',
+# Universo cerrado: SOLO fondos de la Lista de Fondos Recomendados (TRL)
+# de LATAM ConsultUs · Mayo 2026. Las sugerencias de "Sumar" deben provenir
+# exclusivamente de esta lista. Categorías ausentes (oro, commodities, TIPS,
+# real assets / infra) NO generan sugerencias en la tabla — el problema sigue
+# apareciendo como observación en "Problemas detectados".
+TRL_FUNDS = {
+    # IG short duration / corporate corto plazo
+    'ig_short': [
+        ('LU1882441907', 'Amundi Funds - US Short-Term Bond'),
+        ('IE00B51H7M53', 'Muzinich Funds - EnhancedYield Short-Term Fund'),
+        ('LU2133069521', 'Vontobel - TwentyFour Absolute Return Credit Fund'),
+    ],
+    # EM Equity (incluye Asia ex Japan, blend EM)
+    'em_equity': [
+        ('LU0181495838', 'Schroder ISF Emerging Asia'),
+    ],
+    # EM Debt (si la lógica pide RF emergente)
+    'em_debt': [
+        ('IE00BDZRXR46', 'Neuberger Berman Short Duration Emerging Market Debt'),
+        ('IE00B986J944', 'Neuberger Berman EM Debt - Hard Currency'),
+        ('LU1670632337', 'M&G Lux Emerging Markets Bond Fund'),
+        ('LU0611394940', 'Ninety One - Emerging Markets Corporate Debt Fund'),
+    ],
+    # IA-infra / sectorial Tech (única posición temática que existe en TRL)
+    'tech_sector': [
+        ('LU1235294995', 'Fidelity Funds - Global Technology Fund'),
+    ],
+    # Global Equity para subir RV
+    'global_equity': [
+        ('IE0034235188', 'PineBridge Global Focus Equity Fund'),
+        ('LU0557290698', 'Schroder ISF Global Sustainable Growth'),
+        ('LU0951559797', 'Robeco Capital Growth - BP Global Premium Equities'),
+    ],
+    # NO HAY oro/commodities/TIPS/infra real assets en la lista
 }
+
+
+def pick_trl_fund(category: str, current_isins: set[str]) -> str | None:
+    """Devuelve string 'Nombre (ISIN)' del primer fondo TRL de la categoría
+    que no esté ya en cartera. None si todos ya están o no hay candidatos."""
+    for isin, name in TRL_FUNDS.get(category, []):
+        if isin not in current_isins:
+            return f"{name} ({isin})"
+    return None
 
 
 def _short_name(name: str, n: int = 70) -> str:
@@ -890,6 +925,10 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
     if not holdings_detail:
         return []
 
+    # ISINs ya en cartera — para que pick_trl_fund evite sugerir fondos
+    # que el cliente ya tiene
+    current_isins = {isin for isin, _peso, _nombre in holdings}
+
     recs: list[dict] = []
     # Evitar duplicar ajustes sobre la misma posición + dirección
     seen_keys: set[tuple[str, str]] = set()
@@ -908,7 +947,6 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
     rf  = agg.get("s_aa_fixed_income", 0) or 0
     rv  = agg.get("s_aa_equity", 0) or 0
     cash = agg.get("s_aa_cash", 0) or 0
-    com  = agg.get("s_aa_commodities", 0) or 0
     dur  = agg.get("f_ind_moddur", 0) or 0
     aaa = agg.get("f_cacr_aaa", 0) or 0
     aa  = agg.get("f_cacr_aa", 0) or 0
@@ -928,10 +966,6 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
     eq_em_port = eq_em * rv / 100.0
     eq_europe_port = eq_europe * rv / 100.0
     ter = agg.get("ter")
-    precious = agg.get("c_ti_precious", 0) or 0
-    energy = agg.get("c_ti_energy", 0) or 0
-    precious_port = precious * com / 100.0
-    energy_port = energy * com / 100.0
 
     # ---- R1 Calidad crediticia agresiva ---------------------------------
     if sub_ig_rf > (100 - th["ig_min"]) and rf > 5:
@@ -955,13 +989,15 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
                     f"{peso:.1f}%", f"{target}%",
                     f"Reducir concentración sub-investment grade para perfil {perfil}",
                 )
-        # Sumar IG short duration
-        add(
-            "new", "Sumar",
-            SUGGESTIONS['ig_short'],
-            "0%", "5%",
-            "Mejorar calidad crediticia de la cartera con investment grade short duration",
-        )
+        # Sumar IG short duration — solo si hay candidato TRL no presente en cartera
+        ig_short_pick = pick_trl_fund('ig_short', current_isins)
+        if ig_short_pick:
+            add(
+                "new", "Sumar",
+                ig_short_pick,
+                "0%", "5%",
+                "Mejorar calidad crediticia de la cartera con investment grade short duration",
+            )
 
     # ---- R2 Duration larga ----------------------------------------------
     if dur > th["dur_max"] and rf > 5:
@@ -1004,31 +1040,36 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
                     f"{rv:.1f}%", f"{target}%",
                     "Aumentar exposición a renta variable: house view OW global equities",
                 )
+                # Sugerencia concreta de fondo TRL para canalizar el aumento
+                ge_pick = pick_trl_fund('global_equity', current_isins)
+                if ge_pick:
+                    add(
+                        "new", "Sumar",
+                        ge_pick,
+                        "0%", "5%",
+                        "Vehículo concreto de la TRL para canalizar el aumento de RV",
+                    )
 
-    # ---- R4 EM equity ausente -------------------------------------------
+    # ---- R4 EM ausente --------------------------------------------------
+    # Si la estrategia tiene RV > 30% (moderados o más agresivos), priorizar
+    # EM Equity. Si no tiene RV o es Conservadora, priorizar EM Debt.
     if perfil not in ("Conservador", "Otro") and eq_em_port < 3 and rv > 10:
-        add(
-            "new", "Sumar",
-            SUGGESTIONS['em_equity'],
-            f"{eq_em_port:.1f}%", "5%",
-            "Sumar exposición a mercados emergentes: house view OW EM",
-        )
+        if rv > 30:
+            em_pick = pick_trl_fund('em_equity', current_isins)
+        else:
+            em_pick = pick_trl_fund('em_debt', current_isins)
+        if em_pick:
+            add(
+                "new", "Sumar",
+                em_pick,
+                f"{eq_em_port:.1f}%", "5%",
+                "Sumar exposición a mercados emergentes: house view OW EM",
+            )
 
     # ---- R5 Commodities / gold / energy ---------------------------------
-    if precious_port < 1 and rv > 10:
-        add(
-            "new", "Sumar",
-            SUGGESTIONS['oro'],
-            f"{precious_port:.1f}%", "5%",
-            "Sumar oro como hedge inflacionario y geopolítico (OW en house view)",
-        )
-    if energy_port < 1 and rv > 15:
-        add(
-            "new", "Sumar",
-            SUGGESTIONS['commodities'],
-            f"{energy_port:.1f}%", "5%",
-            "Sumar commodities como cobertura inflacionaria (OW en house view)",
-        )
+    # No hay candidatos en la TRL para oro / commodities / real assets.
+    # El finding sigue apareciendo en "Problemas detectados" (vía analyze)
+    # como observación, pero NO genera fila en la tabla de cambios sugeridos.
 
     # ---- R6/R7 removidas -----------------------------------------------
     # R6 (IA-infraestructura): posición táctica/temática, no ajuste estructural.
