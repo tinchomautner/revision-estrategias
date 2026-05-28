@@ -66,9 +66,17 @@ EXCLUDE_PATTERNS = [
 ITAU_EXCLUDE_PATH_RE = re.compile(r"SIN\s*BM|SIN\s*BENCHMARK", re.I)
 ITAU_EXCLUDE_FNAME_RE = re.compile(r"\bS[-\s]?BM\b", re.I)
 
-# Línea de holding: peso ISIN nombre... <métrica numérica o '-' >
+# Línea de holding: peso + IDENTIFICADOR + nombre + métricas
+# Identificador puede ser:
+#  a) ISIN estándar (2 letras + 9 alfanum + 1 dígito = 12 chars exactos)
+#  b) Identificador privado/alternativo de 3-15 chars (BDEBT-I, PGPE, IDPE, GCBREITS, etc.)
+# Para evitar falsos positivos, requerimos que después del nombre vengan al menos 5 floats
+# (las métricas Ret_1m, Ret_YTD, Ret_1y, Ret_3y, Ret_5y como mínimo)
 LINE_RE = re.compile(
-    r"^\s*(\d{1,3}\.\d{1,2})\s+([A-Z]{2}[A-Z0-9]{9}\d)\s+(.+?)\s+[-\d]"
+    r"^\s*(\d{1,3}\.\d{1,2})\s+"                       # 1: peso
+    r"([A-Z][A-Z0-9\-]{2,14})\s+"                       # 2: identificador (ISIN o alt)
+    r"(.+?)\s+"                                         # 3: nombre
+    r"(?=(?:-?\d+\.\d+(?:\s+|$)){5,})"                  # lookahead: 5+ floats trailing
 )
 TOTAL_RE = re.compile(r"^\s*100\.0?0?\s+TOTAL\b", re.I)
 
@@ -2087,6 +2095,9 @@ table.ov{width:100%;border-collapse:collapse;font-size:13px}
 .chip-ag{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-subtle)}
 .sheet-h-r{display:flex;flex-direction:column;align-items:flex-end;gap:9px;flex-shrink:0;min-width:172px}
 .sheet-body{display:grid;grid-template-columns:1.4fr 1fr;gap:clamp(20px,3.2vw,42px);padding:20px 0 0}
+.sheet-body>*{min-width:0}
+.sheet-extra>*{min-width:0}
+.sheet-data>*{min-width:0}
 .sheet-thesis .block{margin-bottom:18px}
 .sheet-thesis .lbl{margin-bottom:8px}
 .sheet-thesis p{font-size:13.5px;line-height:1.62;color:var(--fg);max-width:64ch}
@@ -2151,10 +2162,10 @@ table.ov{width:100%;border-collapse:collapse;font-size:13px}
 .sheet-extra{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,3.2vw,42px);margin-top:clamp(20px,3vw,32px);padding-top:clamp(20px,3vw,32px);border-top:1px solid var(--border)}
 .sheet-block{display:flex;flex-direction:column;min-width:0}
 .sheet-block .grp-t{display:block;font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--gc);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
-@media(max-width:1000px){.sheet-extra{grid-template-columns:1fr;gap:24px}}
 
 .diag{padding-block:clamp(40px,6vw,72px);background:var(--card)}
 .diag-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:clamp(20px,3vw,42px)}
+.diag-grid>*{min-width:0}
 .diag-card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--sh1);padding:22px 24px;margin-bottom:14px}
 .diag-card .lbl{margin-bottom:14px}
 .findings-bar{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--g2);font-size:13px}
@@ -2176,7 +2187,6 @@ table.ov{width:100%;border-collapse:collapse;font-size:13px}
 .client-dist .ok{color:var(--pos);font-weight:700}
 .client-dist .wn{color:var(--warn);font-weight:700}
 .client-dist .cr{color:var(--neg);font-weight:700}
-@media(max-width:1000px){.diag-grid{grid-template-columns:1fr}}
 
 .closing{background:var(--grad-navy);color:#fff;margin-top:clamp(40px,6vw,80px)}
 .closing-in{padding-block:clamp(46px,7vw,92px)}
@@ -2194,27 +2204,94 @@ table.ov{width:100%;border-collapse:collapse;font-size:13px}
 .totop.show{opacity:1;pointer-events:auto;transform:none}
 .totop:hover{background:var(--navy-700)}
 
+/* ---- Tablet (<=1000px): pasa grids 4-col a 2-col, sheet a 1-col ---- */
 @media(max-width:1000px){
   .idx-grid{grid-template-columns:repeat(2,1fr)}
   .view-grid{grid-template-columns:repeat(2,1fr)}
   .sheet-body{grid-template-columns:1fr;gap:24px}
+  .sheet-extra{grid-template-columns:1fr;gap:24px}
   .view-list{grid-template-columns:1fr}
+  .diag-grid{grid-template-columns:1fr}
 }
+
+/* ---- Mobile grande (<=820px): ajustes específicos ---- */
 @media(max-width:820px){
   body{font-size:14.5px}
+  .container{padding-inline:16px}
+
+  /* Hero compacto */
+  .hero h1{font-size:clamp(36px,9vw,52px);line-height:1.0}
+  .hero-meta{gap:16px;padding-top:20px}
+  .hero-meta>div{flex:1 1 calc(50% - 8px);min-width:140px}
+  .hm-v{font-size:clamp(22px,5vw,30px)}
+
+  /* Nav */
+  .nav-links{font-size:11.5px;gap:14px}
+  .nav-date{display:none}
+
+  /* Panorama / view cards */
+  .view-grid{grid-template-columns:1fr;gap:10px}
+  .view-card{padding:14px 16px}
+  .view-list{padding:18px 20px}
+
+  /* Divider categoria de cliente */
   .divider-in{flex-direction:column;align-items:flex-start;gap:6px}
-  .divider-num{align-self:flex-end;margin-top:-30px}
-  .ov thead{display:none}
-  .ov,.ov tbody,.ov tr,.ov td{display:block;width:100%}
-  .ov tbody tr.ov-row{padding:13px 14px;border-bottom:1px solid var(--border);position:relative}
-  .ov td{border:none;padding:2px 0}
-  .ov-name{padding-right:30px!important}
-  .ov-row .chev{position:absolute;right:8px;top:18px;margin:0}
-  .ov td.num,.ov td.ctr{display:inline-flex;align-items:baseline;gap:6px;width:auto;margin-right:16px;font-size:12.5px}
-  .ov td.num::before{content:attr(data-l);font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-subtle)}
+  .divider-num{align-self:flex-end;margin-top:-30px;font-size:80px}
+  .divider h2{font-size:32px}
+
+  /* Tabla overview -> cards apilables (solo aplica a la tabla .ov misma, NO a tablas anidadas dentro del sheet detalle) */
+  table.ov>thead{display:none}
+  table.ov,table.ov>tbody,table.ov>tbody>tr,table.ov>tbody>tr>td{display:block;width:100%}
+  table.ov>tbody>tr.ov-row{padding:13px 14px;border-bottom:1px solid var(--border);position:relative}
+  table.ov>tbody>tr.ov-row.open{border-bottom:none}
+  table.ov>tbody>tr.ov-row>td{border:none;padding:2px 0}
+  table.ov>tbody>tr.ov-detail>td{padding:0}
+  table.ov>tbody>tr.ov-row>td.ov-name{padding-right:30px!important}
+  table.ov>tbody>tr.ov-row .chev{position:absolute;right:8px;top:18px;margin:0}
+  table.ov>tbody>tr.ov-row>td.num,table.ov>tbody>tr.ov-row>td.ctr{display:inline-flex;align-items:baseline;gap:6px;width:auto;margin-right:16px;font-size:12.5px}
+  table.ov>tbody>tr.ov-row>td.num::before{content:attr(data-l);font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-subtle)}
+
+  /* Sheet detalle */
+  .sheet{padding:18px 14px;min-width:0}
+  .sheet-h{flex-direction:column;align-items:flex-start;gap:12px}
+  .sheet-h-r{align-items:flex-start;min-width:0;width:100%}
+  .sheet-h h3{font-size:22px}
+  .sheet-thesis,.sheet-data,.sheet-block{min-width:0}
+  .sheet-thesis p{max-width:100%}
+  .sheet-data{grid-template-columns:1fr}
+  .data-grp.full dl{grid-template-columns:1fr}
+  .dl dd{word-break:break-word}
+
+  /* Tablas dentro del sheet: scroll horizontal en mobile */
+  .changes{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .changes table{min-width:540px;font-size:12px}
+  .perftab{font-size:12px}
+
+  /* Tabla cambios: nombres largos necesitan space */
+  .changes td.act{min-width:160px}
+  .changes td:last-child{min-width:120px}
+
+  /* Diagnóstico */
+  .top-problems table,.client-dist table{font-size:11.5px}
+  .top-problems th,.top-problems td,.client-dist th,.client-dist td{padding:8px 10px}
+  .diag-card{padding:18px 16px;overflow:hidden}
+  .findings-bar{font-size:12px;gap:6px 8px;flex-wrap:wrap;padding:10px 0;width:100%}
+  .findings-bar .fb-label{flex:1 1 0;order:1;min-width:0;font-size:12.5px}
+  .findings-bar .fb-count{width:auto;flex:0 0 auto;font-size:12px;order:2;text-align:right}
+  .findings-bar .fb-track{flex:1 1 100%;order:3;min-width:0;height:6px}
+  /* Scroll horizontal en tablas problemáticas */
+  .top-problems,.client-dist{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  /* Closing */
+  .closing-headline{font-size:32px}
 }
+
+/* ---- Mobile chico (<=560px) ---- */
 @media(max-width:560px){
   .idx-grid,.view-grid{grid-template-columns:1fr}
+  .hero-meta{flex-direction:column;gap:14px}
+  .hero-meta>div{width:100%}
+  .totop{bottom:14px;right:14px}
 }
 @media print{
   .topnav,.totop{display:none}

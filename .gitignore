@@ -6,3 +6,4 @@ data/
 assets/
 shots/
 screenshot.py
+screenshot_responsive.py
