@@ -912,6 +912,226 @@ def find_overlapping_sub(holdings_detail: list[dict], min_total: float = 25.0) -
     return out
 
 
+def _pp(v: str) -> float:
+    """Parsea un valor tipo '5%', '10.0%', '' a float (puntos porcentuales)."""
+    if not v:
+        return 0.0
+    try:
+        return float(str(v).rstrip('%').strip() or 0)
+    except ValueError:
+        return 0.0
+
+
+def _delta_libre(recs: list[dict]) -> float:
+    """Suma de puntos liberados por Bajar/Sacar (acción dn)."""
+    total = 0.0
+    for r in recs:
+        if r.get('dir') == 'dn':
+            de = _pp(r.get('de', ''))
+            a = _pp(r.get('a', ''))
+            total += (de - a)
+    return total
+
+
+def _delta_usado(recs: list[dict]) -> float:
+    """Suma de puntos agregados por Sumar (acción new)."""
+    total = 0.0
+    for r in recs:
+        if r.get('dir') == 'new':
+            de = _pp(r.get('de', ''))
+            a = _pp(r.get('a', ''))
+            total += (a - de)
+    return total
+
+
+def _balance(recs: list[dict], current_isins: set, catalog: dict, gap: float) -> float:
+    """Agrega filas Sumar hasta cubrir el gap. Cada Sumar nuevo es de hasta 10pp.
+    Devuelve el gap residual."""
+    if gap < 1:
+        return gap  # ya balanceado o tolerancia
+
+    # Detectar asset class predominante de las Bajar para priorizar categoría
+    bajas_rf_pp = 0.0
+    bajas_rv_pp = 0.0
+    for r in recs:
+        if r.get('dir') != 'dn':
+            continue
+        de = _pp(r.get('de', ''))
+        a = _pp(r.get('a', ''))
+        delta = de - a
+        # cruzar por nombre del fondo: keywords típicas de RF
+        name = (r.get('position') or '').lower()
+        if any(k in name for k in ['bond', 'debt', 'credit', 'income',
+                                    'yield', 'duration', 'fixed', 'cash']):
+            bajas_rf_pp += delta
+        else:
+            bajas_rv_pp += delta
+
+    # Definir orden de categorías a probar
+    if bajas_rf_pp >= bajas_rv_pp:
+        prio = ['ig_short', 'em_debt']
+    else:
+        prio = ['global_equity', 'em_equity']
+
+    razon_map = {
+        'ig_short':      "Reasignar liberación a investment grade short duration",
+        'em_debt':       "Reasignar liberación a deuda emergente diversificada",
+        'global_equity': "Reasignar liberación a renta variable global",
+        'em_equity':     "Reasignar liberación a renta variable emergente",
+    }
+
+    # Para cada categoría, sumar candidatos TRL hasta cerrar gap
+    for cat in prio:
+        for isin, name in TRL_FUNDS.get(cat, []):
+            if gap < 1:
+                return gap
+            if isin in current_isins:
+                continue
+            # ¿ya está sugerido en recs?
+            ya_sugerido = any(isin in (r.get('position') or '') for r in recs)
+            if ya_sugerido:
+                continue
+            # Tamaño: min(gap, 10) — al menos 5; si gap < 5 ajustamos último Sumar
+            if gap < 5:
+                last = next((r for r in reversed(recs) if r.get('dir') == 'new'), None)
+                if last:
+                    last_a = _pp(last.get('a', ''))
+                    last['a'] = f"{last_a + gap:.0f}%"
+                    gap = 0
+                    return gap
+                # Si no hay Sumar previo, igual agregamos esta fila con gap < 5
+                size = gap
+            else:
+                size = min(gap, 10)
+            recs.append({
+                'dir': 'new',
+                'action': 'Sumar',
+                'position': f"{name} ({isin})",
+                'de': '0%',
+                'a': f"{int(round(size))}%",
+                'razon': razon_map.get(cat, "Reasignar liberación a fondo TRL"),
+            })
+            gap -= size
+        if gap < 1:
+            return gap
+    return gap
+
+
+def _balance_excess(recs: list[dict], holdings_detail: list, agg: dict, gap_neg: float) -> float:
+    """Caso inverso: hay más Sumar que Bajar (gap_neg > 0 representa el exceso
+    que falta financiar). Agrega filas Bajar para liberar puntos.
+    Estrategia: si hay cash material, bajar cash. Si no, bajar el holding más
+    grande de la categoría opuesta a las Sumar (si Sumar son RV → bajar RF
+    grande; si Sumar son RF → bajar RV grande).
+    Devuelve el gap residual."""
+    if gap_neg < 1:
+        return gap_neg
+
+    # Detectar asset class de las Sumar para elegir contraparte
+    sumar_rv_pp = 0.0
+    sumar_rf_pp = 0.0
+    for r in recs:
+        if r.get('dir') != 'new':
+            continue
+        de = _pp(r.get('de', ''))
+        a = _pp(r.get('a', ''))
+        delta = a - de
+        name = (r.get('position') or '').lower()
+        if any(k in name for k in ['equity', 'equities', 'msci', 'stoxx',
+                                    'global focus', 'growth', 'value premium',
+                                    'global premium', 'technology', 'tech']):
+            sumar_rv_pp += delta
+        elif any(k in name for k in ['bond', 'debt', 'credit', 'income',
+                                      'yield', 'duration', 'fixed', 'short-term',
+                                      'absolute return']):
+            sumar_rf_pp += delta
+        else:
+            sumar_rv_pp += delta  # default
+
+    # Helper: ¿está ya sugerido un cambio sobre este ISIN/nombre?
+    def _ya_tocado(nombre: str, isin: str) -> bool:
+        for r in recs:
+            pos = (r.get('position') or '')
+            if isin and isin in pos:
+                return True
+            if nombre and nombre[:30].lower() in pos.lower():
+                return True
+        return False
+
+    # 1) Bajar cash si hay > 5%
+    cash = agg.get('s_aa_cash') or 0
+    if cash > 5 and gap_neg >= 1:
+        size = min(gap_neg, max(cash - 2, 0))
+        if size >= 1:
+            recs.append({
+                'dir': 'dn',
+                'action': 'Bajar',
+                'position': 'Cash',
+                'de': f"{cash:.1f}%",
+                'a': f"{cash - size:.0f}%",
+                'razon': "Reasignar cash estructural a las posiciones sugeridas (house view UW cash)",
+            })
+            gap_neg -= size
+            if gap_neg < 1:
+                return gap_neg
+
+    # 2) Bajar el holding más grande de la categoría opuesta a las Sumar
+    if sumar_rv_pp >= sumar_rf_pp:
+        # Sumar son RV → bajar RV grande (rotación intra-RV)
+        keywords_target = ['equity', 'equities', 'msci', 'stoxx', 'acwi',
+                           's&p', 'sp 500', 'nasdaq']
+        razon_bajar = "Liberar espacio dentro del bucket RV para canalizar las posiciones sugeridas"
+    else:
+        # Sumar son RF → bajar RF grande
+        keywords_target = ['bond', 'debt', 'credit', 'income', 'yield',
+                           'duration', 'fixed']
+        razon_bajar = "Liberar espacio dentro del bucket RF para canalizar las posiciones sugeridas"
+
+    # Ranking de holdings por peso, filtrando por categoría
+    candidatos = []
+    for h in holdings_detail:
+        name = (h.get('nombre') or '').lower()
+        if not any(k in name for k in keywords_target):
+            continue
+        if _ya_tocado(h.get('nombre') or '', h.get('isin') or ''):
+            continue
+        candidatos.append(h)
+    candidatos.sort(key=lambda x: -x['peso'])
+
+    for h in candidatos:
+        if gap_neg < 1:
+            return gap_neg
+        peso = h['peso']
+        # No reducir un holding a menos de 3% (mantener significancia)
+        max_reducible = max(peso - 3, 0)
+        if max_reducible < 1:
+            continue
+        size = min(gap_neg, max_reducible)
+        nuevo = peso - size
+        if size <= 5 and nuevo < 2:
+            action = 'Sacar'
+            nuevo_str = '0%'
+            size = peso
+        elif nuevo <= 1:
+            action = 'Sacar'
+            nuevo_str = '0%'
+            size = peso
+        else:
+            action = 'Bajar'
+            nuevo_str = f"{nuevo:.0f}%"
+        recs.append({
+            'dir': 'dn',
+            'action': action,
+            'position': _short_name(h.get('nombre') or ''),
+            'de': f"{peso:.1f}%",
+            'a': nuevo_str,
+            'razon': razon_bajar,
+        })
+        gap_neg -= size
+
+    return gap_neg
+
+
 def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
               catalog: dict) -> list[dict]:
     """Genera una lista de cambios sugeridos concretos basándose en la
@@ -1131,6 +1351,36 @@ def recommend(agg: dict, perfil: str, holdings: list[tuple[str, float, str]],
             "Un único vehículo",
             "Consolidar fondos con misma sub-categoría para reducir solapamiento",
         )
+
+    # ---- Balanceo de masa: la suma de Bajar/Sacar debe igualar la suma --
+    # de Sumar para que la cartera cierre al 100%.
+    gap = _delta_libre(recs) - _delta_usado(recs)
+    if gap > 0:
+        _balance(recs, current_isins, catalog, gap)
+    elif gap < 0:
+        # Más Sumar que Bajar: necesitamos liberar puntos
+        _balance_excess(recs, holdings_detail, agg, -gap)
+
+    # ---- Pruning de "Subir RV global total" redundante ------------------
+    # Si todas las Sumar terminaron siendo de categorías RV, la fila
+    # "Subir Renta Variable global total" es redundante y la quitamos.
+    rv_isins = set()
+    for cat_key in ('global_equity', 'em_equity', 'tech_sector'):
+        for isin, _name in TRL_FUNDS.get(cat_key, []):
+            rv_isins.add(isin)
+    sumas_total = sum(1 for r in recs if r['dir'] == 'new')
+    sumas_rv = sum(
+        1 for r in recs
+        if r['dir'] == 'new' and any(
+            isin in (r.get('position') or '') for isin in rv_isins
+        )
+    )
+    if sumas_total > 0 and sumas_rv == sumas_total:
+        recs = [
+            r for r in recs
+            if not (r.get('dir') == 'up'
+                    and 'Renta Variable' in (r.get('position') or ''))
+        ]
 
     return recs
 
