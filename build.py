@@ -1340,13 +1340,12 @@ def render_detail(s: dict, det_id: str) -> str:
     # Auto-show RF block: solo si la estrategia tiene exposición material (>= 5%)
     show_rf = rf_w >= 5
     show_rv = rv_w >= 5
-    # Si solo queda 1 bloque visible, ocupa todo el ancho
-    grp_class = "data-grp full" if (show_rf ^ show_rv) else "data-grp"
-
+    # Mantener siempre data-grp simple (no full) — el grid del sheet-data
+    # acomoda 1 o 2 columnas sin descalibrar el dl interno
     rf_block = ""
     if show_rf:
         rf_block = (
-            f'<div class="{grp_class}"><span class="grp-t">Renta Fija</span><dl>'
+            '<div class="data-grp"><span class="grp-t">Renta Fija</span><dl>'
             f'<div class="dl"><dt>YTW</dt><dd class="strong">{fmt_raw(ana.get("ytw"),2,"%")}</dd></div>'
             f'<div class="dl"><dt>Duration</dt><dd>{fmt_raw(ana.get("dur"),2," a")}</dd></div>'
             f'<div class="dl"><dt>Corporate</dt><dd>{fmt_raw(agg.get("f_sec_corp"),1,"%")}</dd></div>'
@@ -1360,7 +1359,7 @@ def render_detail(s: dict, det_id: str) -> str:
     rv_block = ""
     if show_rv:
         rv_block = (
-            f'<div class="{grp_class}"><span class="grp-t">Renta Variable</span><dl>'
+            '<div class="data-grp"><span class="grp-t">Renta Variable</span><dl>'
             f'<div class="dl"><dt>P/E</dt><dd>{fmt_raw(agg.get("e_ind_pe"),1)}</dd></div>'
             f'<div class="dl"><dt>P/B</dt><dd>{fmt_raw(agg.get("e_ind_pb"),2)}</dd></div>'
             f'<div class="dl"><dt>P/S</dt><dd>{fmt_raw(agg.get("e_ind_ps"),2)}</dd></div>'
