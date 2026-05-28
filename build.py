@@ -434,17 +434,18 @@ def _parse_holdings_text(txt: str) -> list[tuple]:
 # 3b. PARSEAR PDFs — métricas de performance (página 7 típicamente)
 # ---------------------------------------------------------------------------
 _FLOAT_RE = re.compile(r'-?\d+\.\d+')
-_BM_TOKENS = ("benchmark", "60-40", "60/40")
+# Detección flexible de línea de Benchmark: cubre nombres como
+# "Benchmark", "Índice", "Index", "Bench", token "BM" aislado o
+# patrones tipo "60-40", "70-30", "35-55-10".
+_BM_PATTERN = re.compile(r"""
+    \b(?:benchmark|índice|indice|index|bench)\b   |   # palabra clave
+    \bBM\b                                         |   # BM aislado
+    \b\d{2,3}\s*-\s*\d{2,3}(?:\s*-\s*\d{2,3})?\b       # "60-40", "70-30", "35-55-10"
+""", re.IGNORECASE | re.VERBOSE)
 
 
 def _is_benchmark_line(line: str) -> bool:
-    low = line.lower()
-    if any(t in low for t in _BM_TOKENS):
-        return True
-    # "BM" como token aislado
-    if re.search(r'\bBM\b', line):
-        return True
-    return False
+    return bool(_BM_PATTERN.search(line))
 
 
 def _extract_perf_from_text(txt: str) -> dict:
@@ -531,10 +532,12 @@ def _extract_perf_from_text(txt: str) -> dict:
 
 
 def parse_performance_metrics(pdf_path: str) -> dict:
-    """Extrae métricas de performance y riesgo de la página 7 del PDF (idx=6).
-    Si no encuentra ahí, busca en otras páginas con header de performance/metrics.
+    """Extrae métricas de performance y riesgo barriendo todas las páginas del PDF.
+    Empieza por las páginas más probables (7, luego 6, 8, 5, 9, ...) y devuelve
+    la primera donde el parser encuentre datos completos (perf + risk).
+
     Devuelve dict con keys: ret_5y, ret_3y, ret_1y, vol_5y, sharpe_5y,
-    dd_5y, dd_3y, up_5y, dn_5y (cualquiera puede ser None).
+    dd_5y, dd_3y, up_5y, dn_5y + las versiones bm_* del benchmark.
     """
     empty = {
         "ret_5y": None, "ret_3y": None, "ret_1y": None,
@@ -549,30 +552,38 @@ def parse_performance_metrics(pdf_path: str) -> dict:
     try:
         with pdfplumber.open(pdf_path) as pdf:
             n = len(pdf.pages)
-            # 1) Primer intento: página 7 (idx 6) directo
-            if n > 6:
-                res = _extract_perf_from_text(pdf.pages[6].extract_text() or "")
-                if res["ret_5y"] is not None or res["vol_5y"] is not None:
-                    return res
-            # 2) Buscar páginas que contengan el header de metrics
+            # Orden de páginas a probar: 7 (idx 6), 6, 8, 5, 9, 4, 10, ...
+            order = [6]
+            for offset in range(1, 8):
+                if 6 - offset >= 0:
+                    order.append(6 - offset)
+                if 6 + offset < n:
+                    order.append(6 + offset)
+
             best = None
-            for pi in range(n):
-                t = pdf.pages[pi].extract_text() or ""
-                up = t.upper()
-                is_metric_page = (
-                    ("RENDIMIENTO Y M" in up)  # ES
-                    or ("PERFORMANCE AND FINANCIAL" in up)  # EN
-                    or ("VOLATILIDAD" in up and "SHARPE" in up)
-                    or ("VOLATILITY" in up and "SHARPE" in up)
-                )
-                if not is_metric_page:
+            for idx in order:
+                if idx >= n or idx < 0:
                     continue
-                res = _extract_perf_from_text(t)
-                if res["ret_5y"] is not None and res["vol_5y"] is not None:
+                txt = pdf.pages[idx].extract_text() or ""
+                if not txt:
+                    continue
+                # Heurística: la página debe contener al menos una palabra clave
+                # del header de la tabla de métricas
+                low = txt.lower()
+                if not any(kw in low for kw in (
+                    'rendimiento', 'performance', 'volatilidad', 'volatility',
+                    'sharpe', 'drawdown', 'capture',
+                )):
+                    continue
+                res = _extract_perf_from_text(txt)
+                # Datos completos (perf + risk) → devolvemos directo
+                if res.get("ret_5y") is not None and res.get("vol_5y") is not None:
                     return res
-                # Guardar el mejor parcial por si nada matchea completo
-                if best is None or sum(v is not None for v in res.values()) > sum(v is not None for v in best.values()):
-                    best = res
+                # Si solo hay perf parcial, lo guardamos como mejor candidato
+                if res.get("ret_5y") is not None:
+                    score = sum(v is not None for v in res.values())
+                    if best is None or score > sum(v is not None for v in best.values()):
+                        best = res
             if best is not None:
                 return best
     except Exception as e:
@@ -1783,18 +1794,20 @@ def render_detail(s: dict, det_id: str) -> str:
             f'</tr>'
         )
     perf_block = (
-        '<div class="data-grp full"><span class="grp-t">Performance & riesgo vs BM</span>'
+        '<section class="sheet-block">'
+        '<span class="grp-t">Performance & riesgo vs BM</span>'
         '<table class="perftab">'
         '<thead><tr><th></th><th>Estrategia</th><th>Benchmark</th></tr></thead>'
         f'<tbody>{perf_rows_html}</tbody>'
-        '</table></div>'
+        '</table></section>'
     )
 
     holdings_block = (
-        '<div class="data-grp full"><span class="grp-t">Holdings (top 15)</span>'
+        '<section class="sheet-block">'
+        '<span class="grp-t">Holdings (top 15)</span>'
         '<div class="changes"><table>'
         '<thead><tr><th>Peso</th><th>Posición</th><th class="num">Ret 3Y</th><th class="num">Ret 5Y</th></tr></thead>'
-        f'<tbody>{hold_rows}</tbody></table></div></div>'
+        f'<tbody>{hold_rows}</tbody></table></div></section>'
     )
 
     # Veredicto narrativa breve
@@ -1846,9 +1859,12 @@ def render_detail(s: dict, det_id: str) -> str:
                   </div>
                   {rf_block}
                   {rv_block}
-                  {perf_block}
-                  {holdings_block}
                 </div>
+              </div>
+
+              <div class="sheet-extra">
+                {perf_block}
+                {holdings_block}
               </div>
 
             </div>
@@ -2126,6 +2142,11 @@ table.ov{width:100%;border-collapse:collapse;font-size:13px}
 .perftab td.s{font-weight:700;color:var(--navy)}
 .perftab td.s.pos{color:var(--pos)}
 .perftab td.s.neg{color:var(--neg)}
+
+.sheet-extra{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,3.2vw,42px);margin-top:clamp(20px,3vw,32px);padding-top:clamp(20px,3vw,32px);border-top:1px solid var(--border)}
+.sheet-block{display:flex;flex-direction:column;min-width:0}
+.sheet-block .grp-t{display:block;font-size:10px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--gc);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+@media(max-width:1000px){.sheet-extra{grid-template-columns:1fr;gap:24px}}
 
 .diag{padding-block:clamp(40px,6vw,72px);background:var(--card)}
 .diag-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:clamp(20px,3vw,42px)}
@@ -2527,6 +2548,23 @@ def main():
             miss_counter[isin] = (cnt + 1, name, tot + peso)
     top_missing = sorted(miss_counter.items(), key=lambda kv: -kv[1][0])[:20]
 
+    # BM detectado: estrategias donde el parser de performance encontró
+    # al menos un valor del benchmark (cualquiera de los bm_*)
+    bm_keys = (
+        "bm_ret_5y", "bm_ret_3y", "bm_ret_1y",
+        "bm_vol_5y", "bm_sharpe_5y",
+        "bm_dd_5y", "bm_dd_3y", "bm_up_5y", "bm_dn_5y",
+    )
+    n_bm = sum(
+        1 for s in strategies
+        if any((s.get("perf") or {}).get(k) is not None for k in bm_keys)
+    )
+    no_bm = [
+        f"{s['cliente']} · {s['estrategia']}"
+        for s in strategies
+        if not any((s.get("perf") or {}).get(k) is not None for k in bm_keys)
+    ]
+
     print("\n" + "=" * 60)
     print("RESUMEN DEL RUN")
     print("=" * 60)
@@ -2535,6 +2573,11 @@ def main():
     print(f"  Atención:  {n_wn}")
     print(f"  OK:        {n_ok}")
     print(f"  Pendiente: {n_pd}")
+    print(f"\nBenchmark detectado: {n_bm} / {len(strategies)}")
+    if no_bm:
+        print(f"Sin BM detectado ({len(no_bm)}):")
+        for x in no_bm:
+            print(f"  - {x}")
     print(f"\nHTML generado: {OUT_HTML.resolve()}")
     print(f"\nTop 20 ISINs no encontrados en catálogo:")
     if top_missing:
