@@ -440,7 +440,8 @@ _FLOAT_RE = re.compile(r'-?\d+\.\d+')
 _BM_PATTERN = re.compile(r"""
     \b(?:benchmark|índice|indice|index|bench)\b   |   # palabra clave
     \bBM\b                                         |   # BM aislado
-    \b\d{2,3}\s*-\s*\d{2,3}(?:\s*-\s*\d{2,3})?\b       # "60-40", "70-30", "35-55-10"
+    \b\d{2,3}-\d{2,3}(?:-\d{2,3})?\b                   # "60-40", "70-30", "35-55-10" SIN espacios
+                                                        # (evita falsos positivos en líneas de solo números)
 """, re.IGNORECASE | re.VERBOSE)
 
 
